@@ -1,4 +1,5 @@
 <Solution>
+  <Project Path="HackAssembler.IntegrationTests/HackAssembler.IntegrationTests.csproj" />
   <Project Path="HackAssembler.Test/HackAssembler.Test.csproj" />
   <Project Path="HackAssembler/HackAssembler.csproj" />
 </Solution>

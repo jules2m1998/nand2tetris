@@ -1,20 +1,28 @@
-using HackAssembler.Abstractions;
-using Microsoft.Extensions.DependencyInjection;
 using System.Reflection;
+using HackAssembler.Abstractions;
+using HackAssembler.Implementations;
+using Microsoft.Extensions.DependencyInjection;
+
 namespace HackAssembler;
 
 public static class DependencyInjections
 {
-    extension(IServiceCollection services){
-        public IServiceCollection AddPipeLine()
+    public static IServiceCollection AddPipeline(this IServiceCollection services)
+    {
+        var implementations = Assembly
+            .GetExecutingAssembly()
+            .GetTypes()
+            .Where(type =>
+                type is { IsClass: true, IsAbstract: false } &&
+                type.GetInterfaces().Any(interfaceType => interfaceType == typeof(IPipelineStep<string[]>)));
+
+        foreach (var implementation in implementations)
         {
-            var implementations = Assembly.GetExecutingAssembly().GetTypes().Where(t => t is {IsClass: true, IsAbstract: false} && t.GetInterfaces().Any(i => i == typeof(IPipelineStep<string[]>)));
-            foreach (var implementation in implementations)
-            {
-                services.AddScoped(typeof(IPipelineStep<string[]>), implementation);
-            }
-            
-            return services;
+            services.AddScoped(typeof(IPipelineStep<string[]>), implementation);
         }
+
+        services.AddScoped<IPipeline, HackAssemblerPipeline>();
+
+        return services;
     }
 }

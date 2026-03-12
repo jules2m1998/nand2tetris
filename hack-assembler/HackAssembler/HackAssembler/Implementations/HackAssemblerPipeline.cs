@@ -1,7 +1,7 @@
 using HackAssembler.Abstractions;
 namespace HackAssembler.Implementations;
 
-public class HackAssemblerPipeline(ICollection<IPipelineStep<string[]>> steps) : IPipeline
+public class HackAssemblerPipeline(IEnumerable<IPipelineStep<string[]>> steps) : IPipeline
 {
 
     public async Task<string> ExecuteAsync(string filePath, string outputDirectory, CancellationToken cancellationToken)
@@ -11,7 +11,7 @@ public class HackAssemblerPipeline(ICollection<IPipelineStep<string[]>> steps) :
         var orderedSteps = steps.OrderBy(x => x.Order).ToList();
         current = orderedSteps.Aggregate(current, (current1, step) => step.Process(current1));
         
-        var outputFileName = Path.GetFileNameWithoutExtension(filePath) + ".bin";
+        var outputFileName = Path.GetFileNameWithoutExtension(filePath) + ".hack";
         var outputFilePath = Path.Combine(outputDirectory, outputFileName);
         var content = string.Join(Environment.NewLine, current);
 

@@ -1,11 +1,14 @@
-﻿using HackAssembler.Abstractions;
+﻿using HackAssembler;
+using HackAssembler.Abstractions;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
+using System;
+using System.IO;
+using System.Threading;
 
-var builder = Host.CreateApplicationBuilder(args);
-builder.Services.AddLogging();
-
-using var host = builder.Build();
+var services = new ServiceCollection();
+services.AddLogging();
+services.AddPipeline();
+using var serviceProvider = services.BuildServiceProvider();
 
 if (args.Length > 0 && IsHelpCommand(args[0]) || args.Length == 0)
 {
@@ -27,7 +30,7 @@ var outputDirectory = args.Length > 1
 
 Directory.CreateDirectory(outputDirectory);
 
-var app = host.Services.GetRequiredService<IPipeline>();
+var app = serviceProvider.GetRequiredService<IPipeline>();
 try
 {
     var outputPath = await app.ExecuteAsync(inputPath, outputDirectory, CancellationToken.None);
