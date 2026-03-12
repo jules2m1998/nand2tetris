@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="HackAssembler.Test/HackAssembler.Test.csproj" />
+  <Project Path="HackAssembler/HackAssembler.csproj" />
+</Solution>

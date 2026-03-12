@@ -1,0 +1,129 @@
+// This file is part of www.nand2tetris.org
+// and the book "The Elements of Computing Systems"
+// by Nisan and Schocken, MIT Press.
+// File name: projects/5/CPU.hdl
+/**
+ * The Hack Central Processing unit (CPU).
+ * Parses the binary code in the instruction input and executes it according to the
+ * Hack machine language specification. In the case of a C-instruction, computes the
+ * function specified by the instruction. If the instruction specifies to read a memory
+ * value, the inM input is expected to contain this value. If the instruction specifies
+ * to write a value to the memory, sets the outM output to this value, sets the addressM
+ * output to the target address, and asserts the writeM output (when writeM = 0, any
+ * value may appear in outM).
+ * If the reset input is 0, computes the address of the next instruction and sets the
+ * pc output to that value. If the reset input is 1, sets pc to 0.
+ * Note: The outM and writeM outputs are combinational: they are affected by the
+ * instruction's execution during the current cycle. The addressM and pc outputs are
+ * clocked: although they are affected by the instruction's execution, they commit to
+ * their new values only in the next cycle.
+ */
+CHIP CPU {
+
+    IN  inM[16],         // M value input  (M = contents of RAM[A])
+        instruction[16], // Instruction for execution
+        reset;           // Signals whether to re-start the current
+                         // program (reset==1) or continue executing
+                         // the current program (reset==0).
+
+    OUT outM[16],        // M value output
+        writeM,          // Write to M? 
+        addressM[15],    // Address in data memory (of M)
+        pc[15];          // address of next instruction
+
+    PARTS:
+    // Part I (Register A)
+    Not(in=instruction[15] , out=cInstruction );
+    Mux16(a=outALU , b=instruction , sel=cInstruction , out=toAregister );
+    Or(a=cInstruction , b=instruction[5] , out=loadRegisterA );
+    ARegister(in=toAregister , load=loadRegisterA , out=outRegA );
+    Register(in=toAregister , load=loadRegisterA , out[0..14]=addressM );
+
+    // Part II (Register D)
+    And(a=instruction[15] , b=instruction[4] , out=loadD );
+    DRegister(in=outALU , load=loadD , out=DRegiste );
+
+    // Part II (M)
+    And(a=instruction[15] , b=instruction[12] , out=selM );
+    Mux16(a=outRegA , b=inM , sel=selM, out=outMorAForALU );
+
+    // Part II (ALU)
+    And(a=instruction[15] , b=instruction[11] , out=zxV );
+    And(a=instruction[15] , b=instruction[10] , out=nxV );
+    And(a=instruction[15] , b=instruction[9] , out=zyV );
+    And(a=instruction[15] , b=instruction[8] , out=nyV );
+    And(a=instruction[15] , b=instruction[7] , out=fV );
+    And(a=instruction[15] , b=instruction[6] , out=noV );
+    ALU(x=DRegiste , y=outMorAForALU , zx=zxV , nx=nxV , zy=zyV , ny=nyV , f=fV , no=noV , out=outALU , zr=zr , ng=ng);
+    ALU(x=DRegiste , y=outMorAForALU , zx=zxV , nx=nxV , zy=zyV , ny=nyV , f=fV , no=noV , out=outM , zr=aluZeroM , ng=aluNegM);
+
+    // Part III (PC)
+    Or(a=false , b=instruction[0] , out=j3);
+    Not(in=j3 , out=nonj3);
+    Or(a=false , b=instruction[1] , out=j2);
+    Not(in=j2 , out=nonj2);
+    Or(a=false , b=instruction[2] , out=j1);
+    Not(in=j1 , out=nonj1);
+    Not(in=zr , out=notZr );
+    Not(in=ng , out=notNg );
+
+    // 001 -> out > 0 -> notj1&notj2&j3&notzr&notng
+    And(a=nonj1 , b=nonj2, out=notj1Andnotj2 );
+    And(a=notj1Andnotj2 , b=j3 , out=notj1Andnotj2Andj3 );
+    And(a=notj1Andnotj2 , b=notZr, out=notj1Andnotj2AndnotZr );
+    And(a=notj1Andnotj2AndnotZr , b=notNg , out=JGT);
+
+    // 010 -> out = 0 -> notj1&j2&notj3&zr
+    And(a=nonj1 , b=j2, out=nonj1Andj2);
+    And(a=nonj1Andj2 , b=nonj3, out=nonj1Andj2Andnonj3);
+    And(a=nonj1Andj2Andnonj3 , b=zr, out=JEQ);
+
+    // 011 -> out >= 0 -> notj1&j2&j3(zr+notng) JGE
+    And(a=nonj1Andj2, b=j3 , out=nonj1Andj2Andj3 );
+    And(a=nonj1Andj2Andj3 , b=zr , out=nonj1Andj2Andj3Andzr );
+    And(a=nonj1Andj2Andj3 , b=notNg , out=nonj1Andj2Andj3Andng );
+    Or(a=nonj1Andj2Andj3Andzr , b=nonj1Andj2Andj3Andng , out=JGE );
+
+    // 100 -> out < 0 -> j1&nonj2&nonj3&neg JLT
+    And(a=j1 , b=nonj2 , out=j1Andnonj2 );
+    And(a=j1Andnonj2 , b=nonj3 , out=j1Andnonj2Andnonj3);
+    And(a=j1Andnonj2Andnonj3 , b=ng , out=JLT);
+
+    // 101 -> out != 0 JNE
+    And(a=j1Andnonj2 , b=j3 , out=j1Andnonj2Andj3 );
+    And(a=j1Andnonj2Andj3 , b=notZr , out=JNE );
+
+    // 110 -> out <= 0 JLE
+    And(a=j1 , b=j2 , out=j1Andj2 );
+    And(a=j1Andj2 , b=nonj3 , out=j1Andj2Andnonj3 );
+    And(a=j1Andj2Andnonj3 , b=zr , out=j1Andj2Andnonj3Andzr );
+    And(a=j1Andj2Andnonj3 , b=ng , out=j1Andj2Andnonj3Andng );
+    Or(a=j1Andj2Andnonj3Andzr, b=j1Andj2Andnonj3Andng, out=JLE );
+
+    /// 111 -> true JMP
+    And(a=j1Andj2, b=j3, out=JMP);
+
+    // Is jump ?
+    Or(a=JGT , b=JEQ , out=a );
+    Or(a=JGE , b=JLT , out=b );
+    Or(a=JNE , b=JLE , out=c );
+    Or(a=c , b=JMP , out=d );
+    Or(a=a , b=b , out=e );
+    Or(a=d , b=e , out=jump );
+
+    Or(a=j1 , b=j2 , out=j1Orj2 );
+    Or(a=j1Orj2 , b=j3 , out=nojump );
+
+    And(a=jump , b=nojump , out=canJump );
+    
+    And(a=instruction[15] , b=canJump , out=isJump );
+
+    Not(in=isJump , out=increment );
+    PC(in=outRegA , load=isJump , inc=increment , reset=reset , out[0..14]=pc );
+
+
+    // Part IV (write in memory)
+    And(a=instruction[15] , b=instruction[3] , out=selWritting );
+    Mux(a=false , b=true , sel=selWritting , out=writeM );
+
+}
