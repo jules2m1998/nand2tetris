@@ -7,6 +7,7 @@
 A Hack machine language assembler written in C# and targeting `.hack` output files.
 
 It takes a Hack assembly source file such as `Prog.asm` and generates `Prog.hack`.
+If the input is a folder, it assembles every `.asm` file in that folder.
 
 ## Requirements
 
@@ -53,29 +54,57 @@ Assemble a file and write the `.hack` output next to the source file:
 dotnet run --project HackAssembler/HackAssembler.csproj -- path/to/Prog.asm
 ```
 
+Assemble every `.asm` file in a folder:
+
+```bash
+dotnet run --project HackAssembler/HackAssembler.csproj -- path/to/programs
+```
+
 Assemble a file and choose the output directory:
 
 ```bash
 dotnet run --project HackAssembler/HackAssembler.csproj -- path/to/Prog.asm path/to/output
 ```
 
+Assemble every `.asm` file in a folder and choose the output directory:
+
+```bash
+dotnet run --project HackAssembler/HackAssembler.csproj -- path/to/programs path/to/output
+```
+
+Continue assembling the rest of a folder after one file fails:
+
+```bash
+dotnet run --project HackAssembler/HackAssembler.csproj -- --continue-on-error path/to/programs path/to/output
+```
+
 ## CLI Usage
 
 ```text
-hack-assembler <path-to-file> [output-directory]
+hack-assembler [--continue-on-error] <path-to-file-or-folder> [output-directory]
 ```
 
-- `<path-to-file>`: path to the input `.asm` file
+- `<path-to-file-or-folder>`: path to the input `.asm` file, or a folder containing `.asm` files
 - `[output-directory]`: optional destination folder for the generated `.hack` file
+- `--continue-on-error`: continue assembling the remaining `.asm` files when one fails
 
 Example:
 
 ```bash
 hack-assembler ./Add.asm
 hack-assembler ./Fill.asm ./build
+hack-assembler ./programs
+hack-assembler ./programs ./build
+hack-assembler --continue-on-error ./programs ./build
 ```
 
 If the input file is `Fill.asm`, the generated file will be `Fill.hack`.
+If the input path is a folder, every `.asm` file in that folder is assembled.
+By default the command stops on the first failure. With `--continue-on-error`, it keeps going and exits with a non-zero status if any file failed.
+
+## Progress Loader
+
+When you run the CLI in an interactive terminal, it shows a small spinner while files are being assembled. The loader is automatically suppressed when output is redirected, so it does not pollute scripts or test output.
 
 ## Publish Standalone Executables
 
