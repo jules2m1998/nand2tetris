@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="VMTranslator/VMTranslator.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/VMTranslator.Tests/VMTranslator.Tests.csproj" />
+  </Folder>
+</Solution>
