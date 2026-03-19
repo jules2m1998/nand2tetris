@@ -21,14 +21,14 @@ public partial class HackVmLineTranslator : IVmLineTranslator
         },
     };
 
-    public string[] Translate(string line, int lineNumber = 0)
+    public string[] Translate(string line, int lineNumber = 0, string fileName = "FileName")
     {
         return [
             $"// {line}",
-            ..MapTranslate(line, lineNumber)
+            ..MapTranslate(line, lineNumber, fileName)
         ];
     }
-    private string[] MapTranslate(string line, int lineNumber)
+    private string[] MapTranslate(string line, int lineNumber, string fileName)
     {
 
         var matchPushPop = PushPopInstructionRegex().Match(line);
@@ -45,8 +45,8 @@ public partial class HackVmLineTranslator : IVmLineTranslator
             {
                 return command switch
                 {
-                    "push" => ProcessPushInstructions(segment, index),
-                    "pop" => ProcessPopInstructions(segment, index),
+                    "push" => ProcessPushInstructions(segment, index, fileName),
+                    "pop" => ProcessPopInstructions(segment, index, fileName),
                     _ => throw new InvalidOperationException($"Line  {lineNumber}, Incorrect instruction for : {line}")
                 };
 
@@ -355,7 +355,7 @@ public partial class HackVmLineTranslator : IVmLineTranslator
         ];
     }
 
-    private static string[] ProcessPushInstructions(string segment, int index)
+    private static string[] ProcessPushInstructions(string segment, int index, string fileName)
     {
         return segment switch
         {
@@ -363,15 +363,15 @@ public partial class HackVmLineTranslator : IVmLineTranslator
             "argument" or "local" or "this" or "that" => PushLocalOrArgumentInstructions(segment, index),
             "temp" => PushTempInstructions(index),
             "pointer" => PushPointerInstructions(index),
-            "static" => PushStaticInstructions(index),
+            "static" => PushStaticInstructions(index, fileName),
             _ =>
             [
             ]
         };
 
     }
-
-    private static string[] ProcessPopInstructions(string segment, int index)
+    
+    private static string[] ProcessPopInstructions(string segment, int index, string fileName)
     {
         return segment switch
         {
@@ -379,14 +379,14 @@ public partial class HackVmLineTranslator : IVmLineTranslator
             "argument" or "local" or "this" or "that" => PopLocalOrArgumentInstructions(segment, index),
             "temp" => PopTempInstructions(index),
             "pointer" => PopPointerInstructions(index),
-            "static" => PopStaticInstructions(index),
+            "static" => PopStaticInstructions(index, fileName),
             _ =>
             [
             ]
         };
 
     }
-    private static string[] PopStaticInstructions(int index)
+    private static string[] PopStaticInstructions(int index, string fileName)
     {
         return
         [
@@ -394,7 +394,7 @@ public partial class HackVmLineTranslator : IVmLineTranslator
             "AM=M-1",
             "D=M",
 
-            $"@FileName.{index}",
+            $"@{fileName}.{index}",
             "M=D"
         ];
     }
@@ -464,11 +464,11 @@ public partial class HackVmLineTranslator : IVmLineTranslator
         throw new InvalidOperationException();
     }
 
-    private static string[] PushStaticInstructions(int index)
+    private static string[] PushStaticInstructions(int index, string fileName)
     {
         return
         [
-            $"@FileName.{index}",
+            $"@{fileName}.{index}",
             "D=M",
             ..LoadDStack()
         ];

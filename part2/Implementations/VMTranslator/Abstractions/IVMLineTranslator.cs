@@ -13,6 +13,7 @@ public interface IVmLineTranslator
     /// </example>
     /// <param name="line">The VM line of code to be translated</param>
     /// <param name="lineNumber">The current line</param>
+    /// <param name="fileName">The current VM file basename used for static symbols</param>
     /// <returns>The hack assembler result</returns>
-    string[]  Translate(string line, int lineNumber = 0);
+    string[]  Translate(string line, int lineNumber = 0, string fileName = "FileName");
 }

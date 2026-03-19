@@ -49,40 +49,38 @@ public class VmTranslatorProgramIntegrationTests : IDisposable
         Assert.Contains(Path.GetFileName(destinationPath), result.StandardOutput);
         Assert.Equal(string.Empty, result.StandardError);
 
-        var actualLines = NormalizeIndentation(await File.ReadAllLinesAsync(destinationPath));
+        var actualLines = await File.ReadAllLinesAsync(destinationPath);
         Assert.Equal(
-            BootstrapSpInitialization()
-                .Concat(
-                [
-                    "// push constant 7",
-                    "@7",
-                    "D=A",
-                    "@SP",
-                    "A=M",
-                    "M=D",
-                    "@SP",
-                    "M=M+1",
-                    "// push constant 8",
-                    "@8",
-                    "D=A",
-                    "@SP",
-                    "A=M",
-                    "M=D",
-                    "@SP",
-                    "M=M+1",
-                    "// add",
-                    "@SP",
-                    "AM=M-1",
-                    "D=M",
-                    "A=A-1",
-                    "M=D+M"
-                ])
-                .ToArray(),
+            new[]
+            {
+                "// push constant 7",
+                "@7",
+                "D=A",
+                "@SP",
+                "A=M",
+                "M=D",
+                "@SP",
+                "M=M+1",
+                "// push constant 8",
+                "@8",
+                "D=A",
+                "@SP",
+                "A=M",
+                "M=D",
+                "@SP",
+                "M=M+1",
+                "// add",
+                "@SP",
+                "AM=M-1",
+                "D=M",
+                "A=A-1",
+                "M=D+M"
+            },
             actualLines);
     }
 
     [Fact]
-    public async Task Run_WithSingleVmFile_BootstrapsSpWithoutInjectingSysInitCall()
+    public async Task Run_WithSingleVmFile_DoesNotInjectBootstrapOrSysInitCall()
     {
         var workingDirectory = CreateTemporaryDirectory();
         var sourceFileName = "SimpleAdd.vm";
@@ -104,10 +102,8 @@ public class VmTranslatorProgramIntegrationTests : IDisposable
         Assert.True(File.Exists(destinationPath));
         Assert.Equal(string.Empty, result.StandardError);
 
-        var actualLines = NormalizeIndentation(await File.ReadAllLinesAsync(destinationPath));
-        var expectedLines = BootstrapSpInitialization()
-            .Concat(BuildExpectedProgram(commands))
-            .ToArray();
+        var actualLines = await File.ReadAllLinesAsync(destinationPath);
+        var expectedLines = BuildExpectedProgram(commands, "ThirtyLines");
 
         Assert.Equal(expectedLines, actualLines);
     }
@@ -189,10 +185,8 @@ public class VmTranslatorProgramIntegrationTests : IDisposable
         Assert.Contains("Translation completed:", result.StandardOutput);
         Assert.Equal(string.Empty, result.StandardError);
 
-        var actualLines = NormalizeIndentation(await File.ReadAllLinesAsync(destinationPath));
-        var expectedLines = BootstrapSpInitialization()
-            .Concat(BuildExpectedProgram(commands))
-            .ToArray();
+        var actualLines = await File.ReadAllLinesAsync(destinationPath);
+        var expectedLines = BuildExpectedProgram(commands, "ThirtyLines");
 
         Assert.Equal(expectedLines, actualLines);
     }
@@ -230,9 +224,7 @@ public class VmTranslatorProgramIntegrationTests : IDisposable
         Assert.Equal(string.Empty, result.StandardError);
 
         var actualLines = NormalizeIndentation(await File.ReadAllLinesAsync(destinationPath));
-        var expectedLines = BootstrapSpInitialization()
-            .Concat(ReadableFunctionProgramExpected())
-            .ToArray();
+        var expectedLines = ReadableFunctionProgramExpected();
 
         Assert.Equal(expectedLines, actualLines);
     }
@@ -263,8 +255,8 @@ public class VmTranslatorProgramIntegrationTests : IDisposable
         Assert.Equal(string.Empty, result.StandardError);
 
         var actualLines = NormalizeIndentation(await File.ReadAllLinesAsync(destinationPath));
-        var expectedLines = BootstrapSpInitialization()
-            .Concat(commands.SelectMany(ExpectedBranchingTranslation))
+        var expectedLines = commands
+            .SelectMany(ExpectedBranchingTranslation)
             .ToArray();
 
         Assert.Equal(expectedLines, actualLines);
@@ -380,6 +372,57 @@ public class VmTranslatorProgramIntegrationTests : IDisposable
         Assert.Equal(expectedLines, actualLines);
     }
 
+    [Fact]
+    public async Task Run_WithDirectoryPath_UsesVmFileNamePrefix_ForStaticSymbols()
+    {
+        var workingDirectory = CreateTemporaryDirectory();
+        var programDirectoryName = "StaticsProgram";
+        var programDirectoryPath = Path.Combine(workingDirectory, programDirectoryName);
+        Directory.CreateDirectory(programDirectoryPath);
+
+        await File.WriteAllTextAsync(
+            Path.Combine(programDirectoryPath, "Sys.vm"),
+            """
+            function Sys.init 0
+            call Class1.set 0
+            call Class2.set 0
+            label END
+            goto END
+            """);
+
+        await File.WriteAllTextAsync(
+            Path.Combine(programDirectoryPath, "Class1.vm"),
+            """
+            function Class1.set 0
+            push constant 11
+            pop static 0
+            return
+            """);
+
+        await File.WriteAllTextAsync(
+            Path.Combine(programDirectoryPath, "Class2.vm"),
+            """
+            function Class2.set 0
+            push constant 22
+            pop static 0
+            return
+            """);
+
+        var destinationPath = Path.Combine(programDirectoryPath, $"{programDirectoryName}.asm");
+
+        var result = await RunProgramAsync(workingDirectory, programDirectoryPath);
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.True(File.Exists(destinationPath));
+        Assert.Equal(string.Empty, result.StandardError);
+
+        var actualAssembly = NormalizeNewLines(await File.ReadAllTextAsync(destinationPath));
+
+        Assert.Contains("@Class1.0", actualAssembly);
+        Assert.Contains("@Class2.0", actualAssembly);
+        Assert.DoesNotContain("@FileName.0", actualAssembly);
+    }
+
     public void Dispose()
     {
         foreach (var directory in temporaryDirectories)
@@ -450,13 +493,13 @@ public class VmTranslatorProgramIntegrationTests : IDisposable
         return text.Replace("\r\n", "\n");
     }
 
-    private static string[] BuildExpectedProgram(string[] commands)
+    private static string[] BuildExpectedProgram(string[] commands, string fileName = "FileName")
     {
         var lines = new List<string>();
 
         for (var i = 0; i < commands.Length; i++)
         {
-            lines.AddRange(ExpectedTranslation(commands[i], i + 2));
+            lines.AddRange(ExpectedTranslation(commands[i], i + 2, fileName));
         }
 
         return [.. lines];
@@ -483,13 +526,13 @@ public class VmTranslatorProgramIntegrationTests : IDisposable
         ];
     }
 
-    private static string[] ExpectedTranslation(string command, int lineNumber)
+    private static string[] ExpectedTranslation(string command, int lineNumber, string fileName = "FileName")
     {
         var tokens = command.Split(' ', StringSplitOptions.RemoveEmptyEntries);
         return tokens[0] switch
         {
-            "push" => ExpectedPush(tokens[1], int.Parse(tokens[2]), command),
-            "pop" => ExpectedPop(tokens[1], int.Parse(tokens[2]), command),
+            "push" => ExpectedPush(tokens[1], int.Parse(tokens[2]), command, fileName),
+            "pop" => ExpectedPop(tokens[1], int.Parse(tokens[2]), command, fileName),
             "add" => Binary(command, "+"),
             "sub" => Binary(command, "-"),
             "or" => Binary(command, "|"),
@@ -518,7 +561,7 @@ public class VmTranslatorProgramIntegrationTests : IDisposable
         };
     }
 
-    private static string[] ExpectedPush(string segment, int index, string command)
+    private static string[] ExpectedPush(string segment, int index, string command, string fileName)
     {
         return segment switch
         {
@@ -553,7 +596,7 @@ public class VmTranslatorProgramIntegrationTests : IDisposable
             "static" =>
             [
                 $"// {command}",
-                $"@FileName.{index}",
+                $"@{fileName}.{index}",
                 "D=M",
                 .. PushFromD()
             ],
@@ -561,7 +604,7 @@ public class VmTranslatorProgramIntegrationTests : IDisposable
         };
     }
 
-    private static string[] ExpectedPop(string segment, int index, string command)
+    private static string[] ExpectedPop(string segment, int index, string command, string fileName)
     {
         return segment switch
         {
@@ -600,7 +643,7 @@ public class VmTranslatorProgramIntegrationTests : IDisposable
                 "@SP",
                 "AM=M-1",
                 "D=M",
-                $"@FileName.{index}",
+                $"@{fileName}.{index}",
                 "M=D"
             ],
             _ => throw new InvalidOperationException($"Unsupported pop segment in test: {segment}")

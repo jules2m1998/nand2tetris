@@ -38,7 +38,7 @@ internal static class VmTranslatorProgram
 
             try
             {
-                TranslateFiles(sourceFiles, destinationPath, translator, includeSysInitCall: true);
+                TranslateFiles(sourceFiles, destinationPath, translator, includeBootstrap: true, includeSysInitCall: true);
                 loader.Complete();
                 WriteColoredLine(Console.Out, $"Translation completed: {destinationPath}", ConsoleColor.Green);
                 return 0;
@@ -69,7 +69,7 @@ internal static class VmTranslatorProgram
 
         try
         {
-            TranslateFiles([inputPath], destinationFilePath, translator, includeSysInitCall: false);
+            TranslateFiles([inputPath], destinationFilePath, translator, includeBootstrap: false, includeSysInitCall: false);
             fileLoader.Complete();
             WriteColoredLine(Console.Out, $"Translation completed: {destinationFilePath}", ConsoleColor.Green);
             return 0;
@@ -110,7 +110,7 @@ internal static class VmTranslatorProgram
         Console.Out.WriteLine("Behavior:");
         Console.Out.WriteLine("  - Accepts relative or absolute .vm paths");
         Console.Out.WriteLine("  - Creates the destination next to the source with an .asm extension");
-        Console.Out.WriteLine("  - Initializes SP to 256 before translating");
+        Console.Out.WriteLine("  - Initializes SP to 256 before directory translation");
         Console.Out.WriteLine("  - Streams the source line by line");
         Console.Out.WriteLine("  - Deletes the destination file if translation fails");
     }
@@ -124,12 +124,20 @@ internal static class VmTranslatorProgram
             .ToArray();
     }
 
-    private static void TranslateFiles(IEnumerable<string> sourcePaths, string destinationPath, HackVmLineTranslator translator, bool includeSysInitCall)
+    private static void TranslateFiles(
+        IEnumerable<string> sourcePaths,
+        string destinationPath,
+        HackVmLineTranslator translator,
+        bool includeBootstrap,
+        bool includeSysInitCall)
     {
         using var outputStream = new FileStream(destinationPath, FileMode.Create, FileAccess.Write, FileShare.None);
         using var writer = new StreamWriter(outputStream);
 
-        WriteBootstrap(writer, translator, includeSysInitCall);
+        if (includeBootstrap)
+        {
+            WriteBootstrap(writer, translator, includeSysInitCall);
+        }
 
         foreach (var sourcePath in sourcePaths)
         {
@@ -160,6 +168,7 @@ internal static class VmTranslatorProgram
     {
         using var inputStream = new FileStream(sourcePath, FileMode.Open, FileAccess.Read, FileShare.Read);
         using var reader = new StreamReader(inputStream);
+        var fileName = Path.GetFileNameWithoutExtension(sourcePath);
 
         string? line;
         var lineNumber = 1;
@@ -174,7 +183,7 @@ internal static class VmTranslatorProgram
                 continue;
             }
 
-            var translatedLines = translator.Translate(sanitizedLine, lineNumber);
+            var translatedLines = translator.Translate(sanitizedLine, lineNumber, fileName);
             foreach (var translatedLine in translatedLines)
             {
                 writer.WriteLine(translatedLine);
