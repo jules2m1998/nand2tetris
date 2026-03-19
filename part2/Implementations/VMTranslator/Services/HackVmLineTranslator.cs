@@ -23,16 +23,43 @@ public partial class HackVmLineTranslator : IVmLineTranslator
     
     public string[] Translate(string line, int lineNumber = 0)
     {
-        var match = PushPopInstructionRegex().Match(line);
         return [
             $"// {line}",
-            ..MapTranslate(line, match, lineNumber)
+            ..MapTranslate(line, lineNumber)
         ];
     }
-    private static string[] MapTranslate(string line, Match match, int lineNumber)
+    private string[] MapTranslate(string line, int lineNumber)
     {
 
-        if (!match.Success)
+        var matchPushPop = PushPopInstructionRegex().Match(line);
+        if (matchPushPop.Success)
+        {
+            var segment = matchPushPop.Groups["segment"].Value;
+            var indexStr = matchPushPop.Groups["index"].Value;
+            var command =  matchPushPop.Groups["command"].Value;
+            if (!int.TryParse(indexStr, out var index))
+            {
+                throw new InvalidOperationException($"Line {lineNumber}, Invalid instruction for : {line}");
+            }
+            try
+            {
+                return command switch
+                {
+                    "push" => ProcessPushInstructions(segment, index),
+                    "pop" => ProcessPopInstructions(segment, index),
+                    _ => throw new InvalidOperationException($"Line  {lineNumber}, Incorrect instruction for : {line}")
+                };
+
+            }
+            catch (Exception e)
+            {
+                throw new InvalidOperationException($"Line  {lineNumber}, Invalid instruction for : {line}", e);
+            }
+        }
+        
+        var matchFuncCall = CallFunctionInstructionRegex().Match(line);
+        if (!matchFuncCall.Success)
+        {
             return line switch
             {
                 "add" => ProcessAddInstruction("+"),
@@ -42,40 +69,207 @@ public partial class HackVmLineTranslator : IVmLineTranslator
                 "eq" => ProcessCompareInstruction("=", lineNumber),
                 "gt" => ProcessCompareInstruction(">", lineNumber),
                 "lt" => ProcessCompareInstruction("<", lineNumber),
-                "neg" => [
+                "neg" =>
+                [
                     "@SP",
                     "A=M-1",
                     "M=-M"
                 ],
-                "not" => [
+                "not" =>
+                [
                     "@SP",
                     "A=M-1",
                     "M=!M"
                 ],
+                "return" => ProcessReturnInstruction(),
                 _ => throw new InvalidOperationException($"line {lineNumber} Invalid instruction for : {line}")
             };
-        var segment = match.Groups["segment"].Value;
-        var indexStr = match.Groups["index"].Value;
-        var command =  match.Groups["command"].Value;
-        if (!int.TryParse(indexStr, out var index))
+        }
+        
+        var type = matchFuncCall.Groups["type"].Value;
+        var name = matchFuncCall.Groups["name"].Value;
+        var arg = matchFuncCall.Groups["arg"].Value;
+        if (!int.TryParse(arg, out var number))
         {
             throw new InvalidOperationException($"Line {lineNumber}, Invalid instruction for : {line}");
         }
         try
         {
-            return command switch
+            return type switch
             {
-                "push" => ProcessPushInstructions(segment, index),
-                "pop" => ProcessPopInstructions(segment, index),
+                "call" => ProcessCallInstruction(line, name, number, lineNumber),
+                "function" => ProcessFunctionInstruction(line, name, number, lineNumber),
                 _ => throw new InvalidOperationException($"Line  {lineNumber}, Incorrect instruction for : {line}")
             };
-
         }
         catch (Exception e)
         {
             throw new InvalidOperationException($"Line  {lineNumber}, Invalid instruction for : {line}", e);
         }
     }
+    private string[] ProcessFunctionInstruction(string line, string name, int number, int lineNumber)
+    {
+        var result = new List<string>
+        {
+            $"// begin [{line}]",
+            Indent("// Declare the function to be able to jump in it"),
+            Indent($"({name})"),
+            Indent($"// Push 0 n-tine (n={number})")
+        };
+
+        for (var i = 0; i < number; i++)
+        {
+            result.Add(Indent("@0"));
+            result.Add(Indent("D=A"));
+            result.AddRange(LoadDStack()
+                .Select(r => Indent(r)));
+        }
+
+        result.Add($"// end [{line}]");
+
+        return result.ToArray();
+    }
+
+    private string[] ProcessCallInstruction(string line, string name, int number, int lineNumber)
+    {
+        var returnLabel = $"{name}.ret.{lineNumber}";
+
+        return
+        [
+            $"// begin [{line}]",
+
+            Indent("// push return addr"),
+            Indent($"@{returnLabel}"),
+            Indent("D=A"),
+            ..LoadDStack()
+                .Select(r => Indent(r)),
+
+            Indent("// push LCL"),
+            Indent("@LCL"),
+            Indent("D=M"),
+            ..LoadDStack()
+                .Select(r => Indent(r)),
+
+            Indent("// push ARG"),
+            Indent("@ARG"),
+            Indent("D=M"),
+            ..LoadDStack()
+                .Select(r => Indent(r)),
+
+            Indent("// push THIS"),
+            Indent("@THIS"),
+            Indent("D=M"),
+            ..LoadDStack()
+                .Select(r => Indent(r)),
+
+            Indent("// push THAT"),
+            Indent("@THAT"),
+            Indent("D=M"),
+            ..LoadDStack()
+                .Select(r => Indent(r)),
+
+            Indent("// LCL = SP"),
+            Indent("@SP"),
+            Indent("D=M"),
+            Indent("@LCL"),
+            Indent("M=D"),
+
+            Indent($"// ARG = SP - (5 + {number})"),
+            Indent($"@{number}"),
+            Indent("D=A"),
+            Indent("@5"),
+            Indent("D=D+A"),
+            Indent("@SP"),
+            Indent("D=M-D"),
+            Indent("@ARG"),
+            Indent("M=D"),
+
+            Indent($"// goto {name}"),
+            Indent($"@{name}"),
+            Indent("0;JMP"),
+
+            Indent("// declare the return here"),
+            Indent($"({returnLabel})"),
+
+            $"// end [{line}]"
+        ];
+    }
+
+    private static string Indent(string line, int depth = 1)
+    {
+        return $"{new string('\t', depth)}{line}";
+    }
+    
+    private static string[] ProcessReturnInstruction()
+    {
+        return
+        [
+            "// begin [return]",
+
+            Indent("// FRAME = LCL"),
+            Indent("@LCL"),
+            Indent("D=M"),
+            Indent("@R13"),
+            Indent("M=D"),
+
+            Indent("// RET = *(FRAME - 5)"),
+            Indent("@5"),
+            Indent("A=D-A"),
+            Indent("D=M"),
+            Indent("@R14"),
+            Indent("M=D"),
+
+            Indent("// *ARG = pop()"),
+            Indent("@SP"),
+            Indent("AM=M-1"),
+            Indent("D=M"),
+            Indent("@ARG"),
+            Indent("A=M"),
+            Indent("M=D"),
+
+            Indent("// SP = ARG + 1"),
+            Indent("@ARG"),
+            Indent("D=M+1"),
+            Indent("@SP"),
+            Indent("M=D"),
+
+            Indent("// THAT = *(FRAME - 1)"),
+            Indent("@R13"),
+            Indent("AM=M-1"),
+            Indent("D=M"),
+            Indent("@THAT"),
+            Indent("M=D"),
+
+            Indent("// THIS = *(FRAME - 2)"),
+            Indent("@R13"),
+            Indent("AM=M-1"),
+            Indent("D=M"),
+            Indent("@THIS"),
+            Indent("M=D"),
+
+            Indent("// ARG = *(FRAME - 3)"),
+            Indent("@R13"),
+            Indent("AM=M-1"),
+            Indent("D=M"),
+            Indent("@ARG"),
+            Indent("M=D"),
+
+            Indent("// LCL = *(FRAME - 4)"),
+            Indent("@R13"),
+            Indent("AM=M-1"),
+            Indent("D=M"),
+            Indent("@LCL"),
+            Indent("M=D"),
+
+            Indent("// goto RET"),
+            Indent("@R14"),
+            Indent("A=M"),
+            Indent("0;JMP"),
+
+            "// end [return]",
+        ];
+    }
+    
     private static string[] ProcessCompareInstruction(string symbol, int lineNumber)
     {
         var endLabel = $"END_{lineNumber}";
@@ -325,5 +519,8 @@ public partial class HackVmLineTranslator : IVmLineTranslator
  
     [GeneratedRegex(@"^(?<command>push|pop)\s+(?<segment>constant|local|argument|this|that|temp|pointer|static)\s+(?<index>\d+)$")]
     private partial Regex PushPopInstructionRegex();
-    
+
+    [GeneratedRegex(@"^(?<type>function|call)\s+(?<name>\S+)\s+(?<arg>\d+)$")]
+    private partial Regex CallFunctionInstructionRegex();
+
 }
