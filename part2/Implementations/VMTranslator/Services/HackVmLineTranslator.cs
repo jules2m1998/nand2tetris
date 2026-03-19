@@ -119,9 +119,8 @@ public partial class HackVmLineTranslator : IVmLineTranslator
             Indent("@SP"),
             Indent("AM=M-1"),
             Indent("D=M"),
-            Indent("D=D+1"),
             Indent($"@{dest}"),
-            Indent("D;JEQ"),
+            Indent("D;JNE"),
             $"// end [{line}]",
         ];
     }
