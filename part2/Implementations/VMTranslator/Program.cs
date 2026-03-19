@@ -60,11 +60,17 @@ internal static class VmTranslatorProgram
     private static void PrintHelp()
     {
         WriteColoredLine(Console.Out, "vm-translator", ConsoleColor.Cyan);
-        Console.Out.WriteLine("Translate one .vm file into a sibling .asm file.");
+        Console.Out.WriteLine("Translate a single Hack VM (.vm) file into Hack assembly (.asm).");
+        Console.Out.WriteLine("Supports memory access, arithmetic, comparison, and function commands.");
         Console.Out.WriteLine();
         Console.Out.WriteLine("Usage:");
         Console.Out.WriteLine("  vm-translator <path-to-file.vm>");
         Console.Out.WriteLine("  vm-translator --help");
+        Console.Out.WriteLine();
+        Console.Out.WriteLine("What It Does:");
+        Console.Out.WriteLine("  - Translates one .vm file into a sibling .asm file");
+        Console.Out.WriteLine("  - Supports push/pop, arithmetic, comparison, function, call, and return commands");
+        Console.Out.WriteLine("  - Emits readable assembly comments for each translated command");
         Console.Out.WriteLine();
         Console.Out.WriteLine("Examples:");
         Console.Out.WriteLine("  vm-translator ./StackArithmetic/SimpleAdd.vm");

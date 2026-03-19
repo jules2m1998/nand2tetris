@@ -14,7 +14,11 @@ public class VmTranslatorProgramIntegrationTests : IDisposable
         Assert.Equal(0, result.ExitCode);
         Assert.Contains("vm-translator", result.StandardOutput);
         Assert.Contains("Usage:", result.StandardOutput);
-        Assert.Contains("Translate one .vm file into a sibling .asm file.", result.StandardOutput);
+        Assert.Contains("Translate a single Hack VM (.vm) file into Hack assembly (.asm).", result.StandardOutput);
+        Assert.Contains("Supports memory access, arithmetic, comparison, and function commands.", result.StandardOutput);
+        Assert.Contains("What It Does:", result.StandardOutput);
+        Assert.Contains("Supports push/pop, arithmetic, comparison, function, call, and return commands", result.StandardOutput);
+        Assert.Contains("Emits readable assembly comments for each translated command", result.StandardOutput);
         Assert.Equal(string.Empty, result.StandardError);
     }
 

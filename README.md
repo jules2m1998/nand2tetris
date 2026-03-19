@@ -65,7 +65,7 @@ The VM translator currently focuses on:
 
 - translating a single `.vm` file into a sibling `.asm` file
 - streaming file input and output line by line
-- arithmetic, logical, comparison, and memory access commands
+- memory access, arithmetic, logical, comparison, and function commands
 - command-line usage and packaging for local installs / course submissions
 
 For VM translator-specific details, see:
