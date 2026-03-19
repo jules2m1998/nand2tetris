@@ -200,6 +200,39 @@ public class VmTranslatorProgramIntegrationTests : IDisposable
         Assert.Equal(expectedLines, actualLines);
     }
 
+    [Fact]
+    public async Task Run_WithBranchingCommands_TranslatesTheWholeFile()
+    {
+        var workingDirectory = CreateTemporaryDirectory();
+        var sourceFileName = "Conditional.vm";
+        var sourcePath = Path.Combine(workingDirectory, sourceFileName);
+        var destinationPath = Path.Combine(workingDirectory, "Conditional.asm");
+
+        var commands = new[]
+        {
+            "if-goto LOOP_BODY",
+            "label LOOP_BODY",
+            "goto LOOP_START"
+        };
+
+        await File.WriteAllTextAsync(sourcePath, string.Join(Environment.NewLine, commands));
+
+        var result = await RunProgramAsync(workingDirectory, sourceFileName);
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.True(File.Exists(destinationPath));
+        Assert.Contains($"Translating {sourceFileName}", result.StandardOutput);
+        Assert.Contains("Translation completed:", result.StandardOutput);
+        Assert.Equal(string.Empty, result.StandardError);
+
+        var actualLines = NormalizeIndentation(await File.ReadAllLinesAsync(destinationPath));
+        var expectedLines = commands
+            .SelectMany(ExpectedBranchingTranslation)
+            .ToArray();
+
+        Assert.Equal(expectedLines, actualLines);
+    }
+
     public void Dispose()
     {
         foreach (var directory in temporaryDirectories)
@@ -298,7 +331,22 @@ public class VmTranslatorProgramIntegrationTests : IDisposable
             "eq" => Compare(command, "JEQ", lineNumber),
             "gt" => Compare(command, "JGT", lineNumber),
             "lt" => Compare(command, "JLT", lineNumber),
+            "label" => Label(command, tokens[1]),
+            "goto" => Goto(command, tokens[1]),
+            "if-goto" => IfGoto(command, tokens[1]),
             _ => throw new InvalidOperationException($"Unsupported test command: {command}")
+        };
+    }
+
+    private static string[] ExpectedBranchingTranslation(string command)
+    {
+        var tokens = command.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        return tokens[0] switch
+        {
+            "label" => Label(command, tokens[1]),
+            "goto" => Goto(command, tokens[1]),
+            "if-goto" => IfGoto(command, tokens[1]),
+            _ => throw new InvalidOperationException($"Unsupported branching test command: {command}")
         };
     }
 
@@ -466,6 +514,45 @@ public class VmTranslatorProgramIntegrationTests : IDisposable
             "A=M-1",
             "M=0",
             $"(END_{lineNumber})"
+        ];
+    }
+
+    private static string[] IfGoto(string command, string label)
+    {
+        return
+        [
+            $"// {command}",
+            $"// begin [{command}]",
+            Indent("@SP"),
+            Indent("AM=M-1"),
+            Indent("D=M"),
+            Indent("D=D+1"),
+            Indent($"@{label}"),
+            Indent("D;JEQ"),
+            $"// end [{command}]"
+        ];
+    }
+
+    private static string[] Label(string command, string label)
+    {
+        return
+        [
+            $"// {command}",
+            Indent($"// begin [{command}]"),
+            Indent($"({label})", 2),
+            Indent($"// end [{command}]")
+        ];
+    }
+
+    private static string[] Goto(string command, string label)
+    {
+        return
+        [
+            $"// {command}",
+            Indent($"// begin [{command}]"),
+            Indent($"@{label}"),
+            Indent("0;JMP"),
+            Indent($"// end [{command}]")
         ];
     }
 

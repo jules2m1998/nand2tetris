@@ -104,6 +104,17 @@ public class HackVmLineTranslatorTests
     }
 
     [Theory]
+    [MemberData(nameof(BranchingInstructions))]
+    public void Translate_ReturnsExpectedAssembly_ForBranchingCommands(string line, string[] expected)
+    {
+        var sut = new HackVmLineTranslator();
+
+        var result = NormalizeIndentation(sut.Translate(line));
+
+        Assert.Equal(expected, result);
+    }
+
+    [Theory]
     [MemberData(nameof(InvalidCommands))]
     public void Translate_ThrowsArgumentException_ForInvalidInput(string line)
     {
@@ -202,6 +213,14 @@ public class HackVmLineTranslatorTests
         {
             { "call Sys.init 0", 66, CallCommand("Sys.init", 0, 66) },
             { "call Math.add 2", 177, CallCommand("Math.add", 2, 177) }
+        };
+
+    public static TheoryData<string, string[]> BranchingInstructions =>
+        new()
+        {
+            { "if-goto LOOP_BODY", IfGotoCommand("LOOP_BODY") },
+            { "label LOOP_BODY", LabelCommand("LOOP_BODY") },
+            { "goto LOOP_START", GotoCommand("LOOP_START") }
         };
 
     public static TheoryData<string> InvalidCommands =>
@@ -382,7 +401,19 @@ public class HackVmLineTranslatorTests
 
         "call Math.add -1",
 
-        "call Math.add x"
+        "call Math.add x",
+
+        "label",
+
+        "goto",
+
+        "if-goto",
+
+        "label LOOP BODY",
+
+        "goto LOOP BODY",
+
+        "if-goto LOOP BODY"
     ];
 
     private static string[] PushConstant(int index)
@@ -711,6 +742,48 @@ public class HackVmLineTranslatorTests
             Indent("// declare the return here"),
             Indent($"({returnLabel})"),
             $"// end [{line}]"
+        ];
+    }
+
+    private static string[] IfGotoCommand(string label)
+    {
+        var line = $"if-goto {label}";
+        return
+        [
+            $"// {line}",
+            $"// begin [{line}]",
+            Indent("@SP"),
+            Indent("AM=M-1"),
+            Indent("D=M"),
+            Indent("D=D+1"),
+            Indent($"@{label}"),
+            Indent("D;JEQ"),
+            $"// end [{line}]"
+        ];
+    }
+
+    private static string[] LabelCommand(string label)
+    {
+        var line = $"label {label}";
+        return
+        [
+            $"// {line}",
+            Indent($"// begin [{line}]"),
+            Indent($"({label})", 2),
+            Indent($"// end [{line}]")
+        ];
+    }
+
+    private static string[] GotoCommand(string label)
+    {
+        var line = $"goto {label}";
+        return
+        [
+            $"// {line}",
+            Indent($"// begin [{line}]"),
+            Indent($"@{label}"),
+            Indent("0;JMP"),
+            Indent($"// end [{line}]")
         ];
     }
 

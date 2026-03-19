@@ -13,7 +13,7 @@ The project currently translates a single `.vm` file into a sibling `.asm` file 
 - Writes the translated Hack assembly line by line into a file with the same name and an `.asm` extension
 - Stops immediately on translation errors
 - Deletes the destination file if translation fails partway through
-- Emits readable assembly comments, including structured `begin` / `end` blocks for function-related commands
+- Emits readable assembly comments, including structured `begin` / `end` blocks for function and program-flow commands
 - Provides a help command, colored console output, and a simple loader while translation is running
 
 ## Supported VM Commands
@@ -24,6 +24,7 @@ The current translator handles:
 - Segments: `constant`, `local`, `argument`, `this`, `that`, `temp`, `pointer`, `static`
 - Arithmetic/logical commands: `add`, `sub`, `and`, `or`, `neg`, `not`
 - Comparison commands: `eq`, `gt`, `lt`
+- Program flow commands: `label`, `goto`, `if-goto`
 - Function commands: `function`, `call`, `return`
 
 Each translated VM instruction is currently emitted with a leading assembly comment such as:
@@ -173,6 +174,13 @@ Run the full test project:
 dotnet test part2/Implementations/tests/VMTranslator.Tests/VMTranslator.Tests.csproj
 ```
 
+The test suite currently covers:
+
+- Memory access, arithmetic, logical, and comparison translation
+- Function, call, and return translation
+- Program flow translation for `label`, `goto`, and `if-goto`
+- End-to-end CLI behavior, output generation, and failure cleanup
+
 Publish a release build manually for the current machine:
 
 ```bash
@@ -182,7 +190,6 @@ dotnet publish part2/Implementations/VMTranslator/VMTranslator.csproj -c Release
 ## Current Limitations
 
 - The CLI currently translates a single `.vm` file, not a whole directory of VM files.
-- Program flow commands `label`, `goto`, and `if-goto` are not implemented yet.
 - Static symbols are emitted with a placeholder file prefix like `FileName.3`.
   This is enough for the current project shape, but a multi-file translator should derive the prefix from the actual source file name.
 - Bootstrap code for multi-file translation is not emitted yet.
@@ -191,7 +198,6 @@ dotnet publish part2/Implementations/VMTranslator/VMTranslator.csproj -c Release
 
 ## Next Steps
 
-- Support program flow commands
 - Support directory-level translation
 - Use the source file name automatically for static symbols
 - Add bootstrap code when translating multi-file VM programs
