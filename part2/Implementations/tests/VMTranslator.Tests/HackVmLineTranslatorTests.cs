@@ -71,6 +71,38 @@ public class HackVmLineTranslatorTests
         Assert.Equal(Comparison("eq", "JEQ", 1), second);
     }
 
+    [Fact]
+    public void Translate_ReturnsExpectedAssembly_ForReturnCommand()
+    {
+        var sut = new HackVmLineTranslator();
+
+        var result = NormalizeIndentation(sut.Translate("return"));
+
+        Assert.Equal(ReturnCommand(), result);
+    }
+
+    [Theory]
+    [MemberData(nameof(FunctionInstructions))]
+    public void Translate_ReturnsExpectedAssembly_ForFunctionCommands(string line, string[] expected)
+    {
+        var sut = new HackVmLineTranslator();
+
+        var result = NormalizeIndentation(sut.Translate(line));
+
+        Assert.Equal(expected, result);
+    }
+
+    [Theory]
+    [MemberData(nameof(CallInstructions))]
+    public void Translate_ReturnsExpectedAssembly_ForCallCommands(string line, int lineNumber, string[] expected)
+    {
+        var sut = new HackVmLineTranslator();
+
+        var result = NormalizeIndentation(sut.Translate(line, lineNumber));
+
+        Assert.Equal(expected, result);
+    }
+
     [Theory]
     [MemberData(nameof(InvalidCommands))]
     public void Translate_ThrowsArgumentException_ForInvalidInput(string line)
@@ -156,6 +188,20 @@ public class HackVmLineTranslatorTests
             { "eq", Comparison("eq", "JEQ", 0) },
             { "gt", Comparison("gt", "JGT", 0) },
             { "lt", Comparison("lt", "JLT", 0) }
+        };
+
+    public static TheoryData<string, string[]> FunctionInstructions =>
+        new()
+        {
+            { "function Sys.init 0", FunctionDeclaration("Sys.init", 0) },
+            { "function Main.main 2", FunctionDeclaration("Main.main", 2) }
+        };
+
+    public static TheoryData<string, int, string[]> CallInstructions =>
+        new()
+        {
+            { "call Sys.init 0", 66, CallCommand("Sys.init", 0, 66) },
+            { "call Math.add 2", 177, CallCommand("Math.add", 2, 177) }
         };
 
     public static TheoryData<string> InvalidCommands =>
@@ -318,7 +364,25 @@ public class HackVmLineTranslatorTests
 
         "push\t\t",
 
-        "pop\tpointer"
+        "pop\tpointer",
+
+        "return 0",
+
+        "function",
+
+        "function Main.main",
+
+        "function Main.main -1",
+
+        "function Main.main x",
+
+        "call",
+
+        "call Math.add",
+
+        "call Math.add -1",
+
+        "call Math.add x"
     ];
 
     private static string[] PushConstant(int index)
@@ -511,6 +575,160 @@ public class HackVmLineTranslatorTests
 
             $"({endLabel})"
         ];
+    }
+
+    private static string[] ReturnCommand()
+    {
+        return
+        [
+            "// return",
+            "// begin [return]",
+            Indent("// FRAME = LCL"),
+            Indent("@LCL"),
+            Indent("D=M"),
+            Indent("@R13"),
+            Indent("M=D"),
+            Indent("// RET = *(FRAME - 5)"),
+            Indent("@5"),
+            Indent("A=D-A"),
+            Indent("D=M"),
+            Indent("@R14"),
+            Indent("M=D"),
+            Indent("// *ARG = pop()"),
+            Indent("@SP"),
+            Indent("AM=M-1"),
+            Indent("D=M"),
+            Indent("@ARG"),
+            Indent("A=M"),
+            Indent("M=D"),
+            Indent("// SP = ARG + 1"),
+            Indent("@ARG"),
+            Indent("D=M+1"),
+            Indent("@SP"),
+            Indent("M=D"),
+            Indent("// THAT = *(FRAME - 1)"),
+            Indent("@R13"),
+            Indent("AM=M-1"),
+            Indent("D=M"),
+            Indent("@THAT"),
+            Indent("M=D"),
+            Indent("// THIS = *(FRAME - 2)"),
+            Indent("@R13"),
+            Indent("AM=M-1"),
+            Indent("D=M"),
+            Indent("@THIS"),
+            Indent("M=D"),
+            Indent("// ARG = *(FRAME - 3)"),
+            Indent("@R13"),
+            Indent("AM=M-1"),
+            Indent("D=M"),
+            Indent("@ARG"),
+            Indent("M=D"),
+            Indent("// LCL = *(FRAME - 4)"),
+            Indent("@R13"),
+            Indent("AM=M-1"),
+            Indent("D=M"),
+            Indent("@LCL"),
+            Indent("M=D"),
+            Indent("// goto RET"),
+            Indent("@R14"),
+            Indent("A=M"),
+            Indent("0;JMP"),
+            "// end [return]"
+        ];
+    }
+
+    private static string[] FunctionDeclaration(string functionName, int localCount)
+    {
+        var line = $"function {functionName} {localCount}";
+        var result = new List<string>
+        {
+            $"// {line}",
+            $"// begin [{line}]",
+            Indent("// Declare the function to be able to jump in it"),
+            Indent($"({functionName})"),
+            Indent($"// Push 0 n-tine (n={localCount})")
+        };
+
+        for (var i = 0; i < localCount; i++)
+        {
+            result.Add(Indent("@0"));
+            result.Add(Indent("D=A"));
+            result.AddRange(IndentLines(PushFromD()));
+        }
+
+        result.Add($"// end [{line}]");
+
+        return result.ToArray();
+    }
+
+    private static string[] CallCommand(string functionName, int argumentCount, int lineNumber)
+    {
+        var line = $"call {functionName} {argumentCount}";
+        var returnLabel = $"{functionName}.ret.{lineNumber}";
+
+        return
+        [
+            $"// {line}",
+            $"// begin [{line}]",
+            Indent("// push return addr"),
+            Indent($"@{returnLabel}"),
+            Indent("D=A"),
+            .. IndentLines(PushFromD()),
+            Indent("// push LCL"),
+            Indent("@LCL"),
+            Indent("D=M"),
+            .. IndentLines(PushFromD()),
+            Indent("// push ARG"),
+            Indent("@ARG"),
+            Indent("D=M"),
+            .. IndentLines(PushFromD()),
+            Indent("// push THIS"),
+            Indent("@THIS"),
+            Indent("D=M"),
+            .. IndentLines(PushFromD()),
+            Indent("// push THAT"),
+            Indent("@THAT"),
+            Indent("D=M"),
+            .. IndentLines(PushFromD()),
+            Indent("// LCL = SP"),
+            Indent("@SP"),
+            Indent("D=M"),
+            Indent("@LCL"),
+            Indent("M=D"),
+            Indent($"// ARG = SP - (5 + {argumentCount})"),
+            Indent($"@{argumentCount}"),
+            Indent("D=A"),
+            Indent("@5"),
+            Indent("D=D+A"),
+            Indent("@SP"),
+            Indent("D=M-D"),
+            Indent("@ARG"),
+            Indent("M=D"),
+            Indent($"// goto {functionName}"),
+            Indent($"@{functionName}"),
+            Indent("0;JMP"),
+            Indent("// declare the return here"),
+            Indent($"({returnLabel})"),
+            $"// end [{line}]"
+        ];
+    }
+
+    private static string[] NormalizeIndentation(string[] lines)
+    {
+        return lines
+            .Select(line => line.Replace("\t", "    ", StringComparison.Ordinal))
+            .ToArray();
+    }
+
+    private static string[] IndentLines(string[] lines, int depth = 1)
+    {
+        return lines.Select(line => Indent(line, depth)).ToArray();
+    }
+
+    private static string Indent(string line, int depth = 1)
+    {
+        return $"{new string(' ', depth * 4)}{line}";
     }
 
     private static string[] PushFromD()
