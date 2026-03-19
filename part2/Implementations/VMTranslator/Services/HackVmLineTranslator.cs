@@ -4,7 +4,7 @@ namespace VMTranslator.Services;
 
 public partial class HackVmLineTranslator : IVmLineTranslator
 {
-    
+
     private static readonly IDictionary<string, string> RegisterMap = new Dictionary<string, string>
     {
         {
@@ -20,7 +20,7 @@ public partial class HackVmLineTranslator : IVmLineTranslator
             "that", "@THAT"
         },
     };
-    
+
     public string[] Translate(string line, int lineNumber = 0)
     {
         return [
@@ -56,7 +56,7 @@ public partial class HackVmLineTranslator : IVmLineTranslator
                 throw new InvalidOperationException($"Line  {lineNumber}, Invalid instruction for : {line}", e);
             }
         }
-        
+
         var matchFuncCall = CallFunctionInstructionRegex().Match(line);
         if (!matchFuncCall.Success)
         {
@@ -82,10 +82,12 @@ public partial class HackVmLineTranslator : IVmLineTranslator
                     "M=!M"
                 ],
                 "return" => ProcessReturnInstruction(),
+                var l when GotoAndLabelInstructionRegex().IsMatch(l) => GotoAndLabelInstruction(line, lineNumber),
+                var l when IfGotoInstructionRegex().IsMatch(l) => IfGotoInstruction(line, lineNumber),
                 _ => throw new InvalidOperationException($"line {lineNumber} Invalid instruction for : {line}")
             };
         }
-        
+
         var type = matchFuncCall.Groups["type"].Value;
         var name = matchFuncCall.Groups["name"].Value;
         var arg = matchFuncCall.Groups["arg"].Value;
@@ -107,6 +109,45 @@ public partial class HackVmLineTranslator : IVmLineTranslator
             throw new InvalidOperationException($"Line  {lineNumber}, Invalid instruction for : {line}", e);
         }
     }
+
+    private string[] IfGotoInstruction(string line, int lineNumber)
+    {
+        var match = IfGotoInstructionRegex().Match(line);
+        var dest = match.Groups["dest"].Value;
+        return [
+            $"// begin [{line}]",
+            Indent("@SP"),
+            Indent("AM=M-1"),
+            Indent("D=M"),
+            Indent("D=D+1"),
+            Indent($"@{dest}"),
+            Indent("D;JEQ"),
+            $"// end [{line}]",
+        ];
+    }
+
+    private string[] GotoAndLabelInstruction(string line, int lineNumber)
+    {
+        var match = GotoAndLabelInstructionRegex().Match(line);
+        var type = match.Groups["type"].Value;
+        var dest = match.Groups["dest"].Value;
+        if (type == "goto")
+        {
+
+            return [
+                Indent($"// begin [{line}]"),
+                Indent($"@{dest}"),
+                Indent("0;JMP"),
+                Indent($"// end [{line}]"),
+            ];
+        }
+        return [
+            Indent($"// begin [{line}]"),
+            Indent($"({dest})", 2),
+            Indent($"// end [{line}]"),
+        ];
+    }
+
     private string[] ProcessFunctionInstruction(string line, string name, int number, int lineNumber)
     {
         var result = new List<string>
@@ -199,7 +240,7 @@ public partial class HackVmLineTranslator : IVmLineTranslator
     {
         return $"{new string('\t', depth)}{line}";
     }
-    
+
     private static string[] ProcessReturnInstruction()
     {
         return
@@ -269,7 +310,7 @@ public partial class HackVmLineTranslator : IVmLineTranslator
             "// end [return]",
         ];
     }
-    
+
     private static string[] ProcessCompareInstruction(string symbol, int lineNumber)
     {
         var endLabel = $"END_{lineNumber}";
@@ -330,7 +371,7 @@ public partial class HackVmLineTranslator : IVmLineTranslator
         };
 
     }
-    
+
     private static string[] ProcessPopInstructions(string segment, int index)
     {
         return segment switch
@@ -353,7 +394,7 @@ public partial class HackVmLineTranslator : IVmLineTranslator
             "@SP",
             "AM=M-1",
             "D=M",
-            
+
             $"@FileName.{index}",
             "M=D"
         ];
@@ -370,7 +411,7 @@ public partial class HackVmLineTranslator : IVmLineTranslator
             "@SP",
             "AM=M-1",
             "D=M",
-            
+
             addr,
             "M=D"
         ];
@@ -389,11 +430,11 @@ public partial class HackVmLineTranslator : IVmLineTranslator
             "D=D+A",
             "@R13",
             "M=D",
-            
+
             "@SP",
             "AM=M-1",
             "D=M",
-            
+
             "@R13",
             "A=M",
             "M=D"
@@ -411,11 +452,11 @@ public partial class HackVmLineTranslator : IVmLineTranslator
                 "D=D+M",
                 "@R13",
                 "M=D",
-                
+
                 "@SP",
                 "AM=M-1",
                 "D=M",
-                
+
                 "@R13",
                 "A=M",
                 "M=D"
@@ -433,7 +474,7 @@ public partial class HackVmLineTranslator : IVmLineTranslator
             ..LoadDStack()
         ];
     }
-    
+
     private static string[] PushPointerInstructions(int index)
     {
         var addr = index == 0 ? "@THIS" : "@THAT";
@@ -448,7 +489,7 @@ public partial class HackVmLineTranslator : IVmLineTranslator
             ..LoadDStack()
         ];
     }
-    
+
     private static string[] PushTempInstructions(int index)
     {
         if (index > 7)
@@ -466,12 +507,12 @@ public partial class HackVmLineTranslator : IVmLineTranslator
             ..LoadDStack()
         ];
     }
-    
+
     private static string[] IncrementSp => [
         "@SP",
         "M=M+1"
     ];
-    
+
     private static string[] DecrementSp => [
         "@SP",
         "M=M-1"
@@ -515,12 +556,17 @@ public partial class HackVmLineTranslator : IVmLineTranslator
         }
         throw new InvalidOperationException();
     }
-    
- 
+
+
     [GeneratedRegex(@"^(?<command>push|pop)\s+(?<segment>constant|local|argument|this|that|temp|pointer|static)\s+(?<index>\d+)$")]
     private partial Regex PushPopInstructionRegex();
 
     [GeneratedRegex(@"^(?<type>function|call)\s+(?<name>\S+)\s+(?<arg>\d+)$")]
     private partial Regex CallFunctionInstructionRegex();
 
+    [GeneratedRegex(@"^(?<type>goto|label)\s+(?<dest>\S+)$")]
+    private partial Regex GotoAndLabelInstructionRegex();
+
+    [GeneratedRegex(@"^if-goto\s+(?<dest>\S+)$")]
+    private partial Regex IfGotoInstructionRegex();
 }
