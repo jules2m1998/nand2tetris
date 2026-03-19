@@ -19,34 +19,65 @@ internal static class VmTranslatorProgram
             return 1;
         }
 
-        var sourcePath = Path.GetFullPath(args[0]);
-        if (!File.Exists(sourcePath))
+        var inputPath = Path.GetFullPath(args[0]);
+        var translator = new HackVmLineTranslator();
+
+        if (Directory.Exists(inputPath))
         {
-            WriteColoredLine(Console.Error, $"Source file was not found: {sourcePath}", ConsoleColor.Red);
+            var sourceFiles = GetOrderedVmFiles(inputPath);
+
+            if (sourceFiles.Length == 0)
+            {
+                WriteColoredLine(Console.Error, $"No .vm files were found in: {inputPath}", ConsoleColor.Red);
+                return 1;
+            }
+
+            var directoryName = Path.GetFileName(inputPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+            var destinationPath = Path.Combine(inputPath, $"{directoryName}.asm");
+            using var loader = new ConsoleLoader($"Translating {directoryName}");
+
+            try
+            {
+                TranslateFiles(sourceFiles, destinationPath, translator, includeSysInitCall: true);
+                loader.Complete();
+                WriteColoredLine(Console.Out, $"Translation completed: {destinationPath}", ConsoleColor.Green);
+                return 0;
+            }
+            catch (Exception ex)
+            {
+                TryDeleteDestination(destinationPath);
+                loader.Complete();
+                WriteColoredLine(Console.Error, $"Translation failed: {ex.Message}", ConsoleColor.Red);
+                return 1;
+            }
+        }
+
+        if (!File.Exists(inputPath))
+        {
+            WriteColoredLine(Console.Error, $"Source file was not found: {inputPath}", ConsoleColor.Red);
             return 1;
         }
 
-        if (!string.Equals(Path.GetExtension(sourcePath), ".vm", StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(Path.GetExtension(inputPath), ".vm", StringComparison.OrdinalIgnoreCase))
         {
             WriteColoredLine(Console.Error, "The source file must use the .vm extension.", ConsoleColor.Red);
             return 1;
         }
 
-        var destinationPath = Path.ChangeExtension(sourcePath, ".asm");
-        var translator = new HackVmLineTranslator();
-        using var loader = new ConsoleLoader($"Translating {Path.GetFileName(sourcePath)}");
+        var destinationFilePath = Path.ChangeExtension(inputPath, ".asm");
+        using var fileLoader = new ConsoleLoader($"Translating {Path.GetFileName(inputPath)}");
 
         try
         {
-            TranslateFile(sourcePath, destinationPath, translator);
-            loader.Complete();
-            WriteColoredLine(Console.Out, $"Translation completed: {destinationPath}", ConsoleColor.Green);
+            TranslateFiles([inputPath], destinationFilePath, translator, includeSysInitCall: false);
+            fileLoader.Complete();
+            WriteColoredLine(Console.Out, $"Translation completed: {destinationFilePath}", ConsoleColor.Green);
             return 0;
         }
         catch (Exception ex)
         {
-            TryDeleteDestination(destinationPath);
-            loader.Complete();
+            TryDeleteDestination(destinationFilePath);
+            fileLoader.Complete();
             WriteColoredLine(Console.Error, $"Translation failed: {ex.Message}", ConsoleColor.Red);
             return 1;
         }
@@ -79,19 +110,59 @@ internal static class VmTranslatorProgram
         Console.Out.WriteLine("Behavior:");
         Console.Out.WriteLine("  - Accepts relative or absolute .vm paths");
         Console.Out.WriteLine("  - Creates the destination next to the source with an .asm extension");
+        Console.Out.WriteLine("  - Initializes SP to 256 before translating");
         Console.Out.WriteLine("  - Streams the source line by line");
         Console.Out.WriteLine("  - Deletes the destination file if translation fails");
     }
 
-    private static void TranslateFile(string sourcePath, string destinationPath, HackVmLineTranslator translator)
+    private static string[] GetOrderedVmFiles(string directoryPath)
     {
-        using var inputStream = new FileStream(sourcePath, FileMode.Open, FileAccess.Read, FileShare.Read);
-        using var reader = new StreamReader(inputStream);
+        return Directory
+            .GetFiles(directoryPath, "*.vm", SearchOption.TopDirectoryOnly)
+            .OrderByDescending(path => string.Equals(Path.GetFileName(path), "Sys.vm", StringComparison.OrdinalIgnoreCase))
+            .ThenBy(path => Path.GetFileName(path), StringComparer.Ordinal)
+            .ToArray();
+    }
+
+    private static void TranslateFiles(IEnumerable<string> sourcePaths, string destinationPath, HackVmLineTranslator translator, bool includeSysInitCall)
+    {
         using var outputStream = new FileStream(destinationPath, FileMode.Create, FileAccess.Write, FileShare.None);
         using var writer = new StreamWriter(outputStream);
 
+        WriteBootstrap(writer, translator, includeSysInitCall);
+
+        foreach (var sourcePath in sourcePaths)
+        {
+            TranslateFile(sourcePath, writer, translator);
+        }
+    }
+
+    private static void WriteBootstrap(StreamWriter writer, HackVmLineTranslator translator, bool includeSysInitCall)
+    {
+        writer.WriteLine("// bootstrap");
+        writer.WriteLine("@256");
+        writer.WriteLine("D=A");
+        writer.WriteLine("@SP");
+        writer.WriteLine("M=D");
+
+        if (!includeSysInitCall)
+        {
+            return;
+        }
+
+        foreach (var line in translator.Translate("call Sys.init 0", 0))
+        {
+            writer.WriteLine(line);
+        }
+    }
+
+    private static void TranslateFile(string sourcePath, StreamWriter writer, HackVmLineTranslator translator)
+    {
+        using var inputStream = new FileStream(sourcePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+        using var reader = new StreamReader(inputStream);
+
         string? line;
-        var lineNumber = 0;
+        var lineNumber = 1;
 
         while ((line = reader.ReadLine()) is not null)
         {
