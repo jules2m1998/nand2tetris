@@ -22,65 +22,166 @@ internal static class VmTranslatorProgram
         var inputPath = Path.GetFullPath(args[0]);
         var translator = new HackVmLineTranslator();
 
+        try
+        {
+            var plan = CreateTranslationPlan(inputPath);
+            return ExecutePlan(plan, translator);
+        }
+        catch (TranslationSetupException ex)
+        {
+            WriteColoredLine(Console.Error, ex.Message, ConsoleColor.Red);
+            return 1;
+        }
+    }
+
+    private static TranslationPlan CreateTranslationPlan(string inputPath)
+    {
         if (Directory.Exists(inputPath))
         {
-            var sourceFiles = GetOrderedVmFiles(inputPath);
-
-            if (sourceFiles.Length == 0)
-            {
-                WriteColoredLine(Console.Error, $"No .vm files were found in: {inputPath}", ConsoleColor.Red);
-                return 1;
-            }
-
-            var directoryName = Path.GetFileName(inputPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
-            var destinationPath = Path.Combine(inputPath, $"{directoryName}.asm");
-            using var loader = new ConsoleLoader($"Translating {directoryName}");
-
-            try
-            {
-                TranslateFiles(sourceFiles, destinationPath, translator, includeBootstrap: true, includeSysInitCall: true);
-                loader.Complete();
-                WriteColoredLine(Console.Out, $"Translation completed: {destinationPath}", ConsoleColor.Green);
-                return 0;
-            }
-            catch (Exception ex)
-            {
-                TryDeleteDestination(destinationPath);
-                loader.Complete();
-                WriteColoredLine(Console.Error, $"Translation failed: {ex.Message}", ConsoleColor.Red);
-                return 1;
-            }
+            return CreateDirectoryPlan(inputPath);
         }
 
         if (!File.Exists(inputPath))
         {
-            WriteColoredLine(Console.Error, $"Source file was not found: {inputPath}", ConsoleColor.Red);
-            return 1;
+            throw new TranslationSetupException($"Source file was not found: {inputPath}");
         }
 
-        if (!string.Equals(Path.GetExtension(inputPath), ".vm", StringComparison.OrdinalIgnoreCase))
+        if (!UsesVmExtension(inputPath))
         {
-            WriteColoredLine(Console.Error, "The source file must use the .vm extension.", ConsoleColor.Red);
-            return 1;
+            throw new TranslationSetupException("The source file must use the .vm extension.");
         }
 
-        var destinationFilePath = Path.ChangeExtension(inputPath, ".asm");
-        using var fileLoader = new ConsoleLoader($"Translating {Path.GetFileName(inputPath)}");
+        return CreateSingleFilePlan(inputPath);
+    }
+
+    private static TranslationPlan CreateDirectoryPlan(string directoryPath)
+    {
+        var sourceFiles = GetOrderedVmFiles(directoryPath);
+        if (sourceFiles.Length == 0)
+        {
+            throw new TranslationSetupException($"No .vm files were found in: {directoryPath}");
+        }
+
+        var directoryName = GetDirectoryName(directoryPath);
+        var destinationPath = Path.Combine(directoryPath, $"{directoryName}.asm");
+
+        return new TranslationPlan(
+            DisplayName: directoryName,
+            DestinationPath: destinationPath,
+            SourceFiles: sourceFiles,
+            BootstrapMode: BootstrapMode.DirectoryWithSysInit);
+    }
+
+    private static TranslationPlan CreateSingleFilePlan(string filePath)
+    {
+        return new TranslationPlan(
+            DisplayName: Path.GetFileName(filePath),
+            DestinationPath: Path.ChangeExtension(filePath, ".asm"),
+            SourceFiles: [filePath],
+            BootstrapMode: BootstrapMode.None);
+    }
+
+    private static int ExecutePlan(TranslationPlan plan, HackVmLineTranslator translator)
+    {
+        using var loader = new ConsoleLoader($"Translating {plan.DisplayName}");
 
         try
         {
-            TranslateFiles([inputPath], destinationFilePath, translator, includeBootstrap: false, includeSysInitCall: false);
-            fileLoader.Complete();
-            WriteColoredLine(Console.Out, $"Translation completed: {destinationFilePath}", ConsoleColor.Green);
+            TranslateSources(plan, translator);
+            loader.Complete();
+            WriteColoredLine(Console.Out, $"Translation completed: {plan.DestinationPath}", ConsoleColor.Green);
             return 0;
         }
         catch (Exception ex)
         {
-            TryDeleteDestination(destinationFilePath);
-            fileLoader.Complete();
+            TryDeleteDestination(plan.DestinationPath);
+            loader.Complete();
             WriteColoredLine(Console.Error, $"Translation failed: {ex.Message}", ConsoleColor.Red);
             return 1;
         }
+    }
+
+    private static void TranslateSources(TranslationPlan plan, HackVmLineTranslator translator)
+    {
+        using var outputStream = new FileStream(plan.DestinationPath, FileMode.Create, FileAccess.Write, FileShare.None);
+        using var writer = new StreamWriter(outputStream);
+
+        WriteBootstrapIfNeeded(writer, translator, plan.BootstrapMode);
+
+        foreach (var sourcePath in plan.SourceFiles)
+        {
+            TranslateFile(sourcePath, writer, translator);
+        }
+    }
+
+    private static void WriteBootstrapIfNeeded(StreamWriter writer, HackVmLineTranslator translator, BootstrapMode bootstrapMode)
+    {
+        if (bootstrapMode == BootstrapMode.None)
+        {
+            return;
+        }
+
+        // Directory translation must initialize the VM stack before any VM code runs.
+        writer.WriteLine("// bootstrap");
+        writer.WriteLine("@256");
+        writer.WriteLine("D=A");
+        writer.WriteLine("@SP");
+        writer.WriteLine("M=D");
+
+        if (bootstrapMode != BootstrapMode.DirectoryWithSysInit)
+        {
+            return;
+        }
+
+        foreach (var line in translator.Translate("call Sys.init 0", 0))
+        {
+            writer.WriteLine(line);
+        }
+    }
+
+    private static void TranslateFile(string sourcePath, StreamWriter writer, HackVmLineTranslator translator)
+    {
+        using var inputStream = new FileStream(sourcePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+        using var reader = new StreamReader(inputStream);
+
+        var fileName = Path.GetFileNameWithoutExtension(sourcePath);
+        string? rawLine;
+        var lineNumber = 1;
+
+        while ((rawLine = reader.ReadLine()) is not null)
+        {
+            lineNumber++;
+
+            var vmCommand = SanitizeLine(rawLine);
+            if (vmCommand is null)
+            {
+                continue;
+            }
+
+            var translatedLines = translator.Translate(vmCommand, lineNumber, fileName);
+            foreach (var translatedLine in translatedLines)
+            {
+                writer.WriteLine(translatedLine);
+            }
+        }
+    }
+
+    private static string[] GetOrderedVmFiles(string directoryPath)
+    {
+        return [.. Directory
+            .GetFiles(directoryPath, "*.vm", SearchOption.TopDirectoryOnly)
+            .OrderByDescending(path => string.Equals(Path.GetFileName(path), "Sys.vm", StringComparison.OrdinalIgnoreCase))
+            .ThenBy(path => Path.GetFileName(path), StringComparer.Ordinal)];
+    }
+
+    private static string GetDirectoryName(string directoryPath)
+    {
+        return Path.GetFileName(directoryPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+    }
+
+    private static bool UsesVmExtension(string path)
+    {
+        return string.Equals(Path.GetExtension(path), ".vm", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool IsHelpCommand(string arg)
@@ -113,82 +214,6 @@ internal static class VmTranslatorProgram
         Console.Out.WriteLine("  - Initializes SP to 256 before directory translation");
         Console.Out.WriteLine("  - Streams the source line by line");
         Console.Out.WriteLine("  - Deletes the destination file if translation fails");
-    }
-
-    private static string[] GetOrderedVmFiles(string directoryPath)
-    {
-        return Directory
-            .GetFiles(directoryPath, "*.vm", SearchOption.TopDirectoryOnly)
-            .OrderByDescending(path => string.Equals(Path.GetFileName(path), "Sys.vm", StringComparison.OrdinalIgnoreCase))
-            .ThenBy(path => Path.GetFileName(path), StringComparer.Ordinal)
-            .ToArray();
-    }
-
-    private static void TranslateFiles(
-        IEnumerable<string> sourcePaths,
-        string destinationPath,
-        HackVmLineTranslator translator,
-        bool includeBootstrap,
-        bool includeSysInitCall)
-    {
-        using var outputStream = new FileStream(destinationPath, FileMode.Create, FileAccess.Write, FileShare.None);
-        using var writer = new StreamWriter(outputStream);
-
-        if (includeBootstrap)
-        {
-            WriteBootstrap(writer, translator, includeSysInitCall);
-        }
-
-        foreach (var sourcePath in sourcePaths)
-        {
-            TranslateFile(sourcePath, writer, translator);
-        }
-    }
-
-    private static void WriteBootstrap(StreamWriter writer, HackVmLineTranslator translator, bool includeSysInitCall)
-    {
-        writer.WriteLine("// bootstrap");
-        writer.WriteLine("@256");
-        writer.WriteLine("D=A");
-        writer.WriteLine("@SP");
-        writer.WriteLine("M=D");
-
-        if (!includeSysInitCall)
-        {
-            return;
-        }
-
-        foreach (var line in translator.Translate("call Sys.init 0", 0))
-        {
-            writer.WriteLine(line);
-        }
-    }
-
-    private static void TranslateFile(string sourcePath, StreamWriter writer, HackVmLineTranslator translator)
-    {
-        using var inputStream = new FileStream(sourcePath, FileMode.Open, FileAccess.Read, FileShare.Read);
-        using var reader = new StreamReader(inputStream);
-        var fileName = Path.GetFileNameWithoutExtension(sourcePath);
-
-        string? line;
-        var lineNumber = 1;
-
-        while ((line = reader.ReadLine()) is not null)
-        {
-            lineNumber++;
-
-            var sanitizedLine = SanitizeLine(line);
-            if (sanitizedLine is null)
-            {
-                continue;
-            }
-
-            var translatedLines = translator.Translate(sanitizedLine, lineNumber, fileName);
-            foreach (var translatedLine in translatedLines)
-            {
-                writer.WriteLine(translatedLine);
-            }
-        }
     }
 
     private static string? SanitizeLine(string line)
@@ -319,4 +344,18 @@ internal static class VmTranslatorProgram
             Console.Write("\r" + new string(' ', width) + "\r");
         }
     }
+
+    private sealed record TranslationPlan(
+        string DisplayName,
+        string DestinationPath,
+        IReadOnlyList<string> SourceFiles,
+        BootstrapMode BootstrapMode);
+
+    private enum BootstrapMode
+    {
+        None,
+        DirectoryWithSysInit
+    }
+
+    private sealed class TranslationSetupException(string message) : Exception(message);
 }
