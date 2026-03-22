@@ -1,0 +1,77 @@
+// Cactus renders and scrolls the single obstacle used by the game loop.
+class Cactus {
+    static int SCREEN_START;
+    static int SCREEN_WIDTH;
+    static int SCREEN_HEIGHT;
+    static int SCREEN_NBRE_WORD;
+    field int x;
+
+    constructor Cactus new(int ax){
+        let x = ax;
+        let SCREEN_START = 16384;
+        let SCREEN_WIDTH = 512;
+        let SCREEN_HEIGHT = 256;
+        let SCREEN_NBRE_WORD = 32;
+        return this;
+    }
+
+    method int getx(){
+        return x;
+    }
+
+    // Clear the screen words used by the current cactus position.
+    method void erase(){
+        var int addr, i;
+        let addr = SCREEN_START + (240 * SCREEN_NBRE_WORD) + x;
+        let i = 0;
+
+        do Memory.poke(addr +161, 0);
+        do Memory.poke(addr +193, 0);
+        do Memory.poke(addr +225, 0);
+        while (i < 16) {
+            do Memory.poke(addr, 0);
+            let addr = addr + SCREEN_NBRE_WORD;
+            let i = i + 1;
+        }
+        return;
+    }
+
+    // Draw the cactus sprite with a fixed bitmap pattern.
+    method void draw(){
+        var int memAddress, i;
+        let memAddress = SCREEN_START + (240 * SCREEN_NBRE_WORD) + x;
+        // column 0
+        do Memory.poke(memAddress, 3840);
+        do Memory.poke(memAddress +32, 8064);
+        do Memory.poke(memAddress +64, 8064);
+        do Memory.poke(memAddress +96, 8074);
+        do Memory.poke(memAddress +128, 8070);
+        do Memory.poke(memAddress +160, 8078);
+        do Memory.poke(memAddress +192, -24676);
+        do Memory.poke(memAddress +224, -8296);
+        do Memory.poke(memAddress +256, 32696);
+        do Memory.poke(memAddress +288, 32752);
+        do Memory.poke(memAddress +320, 16352);
+        do Memory.poke(memAddress +352, 8128);
+        do Memory.poke(memAddress +384, 8064);
+        do Memory.poke(memAddress +416, 8064);
+        do Memory.poke(memAddress +448, 8064);
+        do Memory.poke(memAddress +480, 8064);
+        // column 1
+        do Memory.poke(memAddress +161, 1);
+        do Memory.poke(memAddress +193, 1);
+        do Memory.poke(memAddress +225, 0);
+
+        return;
+    }
+
+    // Move left by one step and wrap back to the right edge when leaving the screen.
+    method void move(){
+        if (x = 0)  {
+            let x = 31;
+            return;
+        }
+        let x = x - 1;
+        return;
+    }
+}

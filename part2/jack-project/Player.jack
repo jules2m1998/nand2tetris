@@ -1,0 +1,119 @@
+// Player stores the sprite position and the small state machine used for jumping.
+class Player{
+    static int SCREEN_START;
+    static int SCREEN_WIDTH;
+    static int SCREEN_HEIGHT;
+    static int SCREEN_NBRE_WORD;
+    static int SCREEN_SPEED_Y;
+    static int MAX_JMP;
+    field int x, y, jmp;
+    field boolean isJumpUp;
+
+    constructor Player new(int ax, int ay){
+        let x = ax;
+        let y = ay;
+        let jmp = 0;
+        let isJumpUp = true;
+        let SCREEN_START = 16384;
+        let SCREEN_WIDTH = 512;
+        let SCREEN_HEIGHT = 256;
+        let SCREEN_NBRE_WORD = 32;
+        let SCREEN_SPEED_Y = 20;
+        let MAX_JMP = 1;
+
+        return this;
+    }
+
+    method int getx(){
+        return x;
+    }
+
+    method int gety(){
+        return y;
+    }
+
+    // Clear the previously rendered sprite footprint from the screen.
+    method void erase(){
+        var int addr, i;
+        let addr = SCREEN_START + (y * SCREEN_NBRE_WORD * SCREEN_SPEED_Y) + x;
+        let i = 0;
+        while (i < 16) {
+            do Memory.poke(addr, 0);
+            let addr = addr + SCREEN_NBRE_WORD;
+            let i = i + 1;
+        }
+        return;
+    }
+
+    // Draw the player sprite by writing a fixed 16-row pattern to screen memory.
+    method void draw() {
+        var int addr, i;
+        let addr = SCREEN_START + (y * SCREEN_NBRE_WORD * SCREEN_SPEED_Y) + x;
+        let i = 0;
+        do Memory.poke(addr, 448);
+        do Memory.poke(addr +32, 992);
+        do Memory.poke(addr +64, 992);
+        do Memory.poke(addr +96, 448);
+        do Memory.poke(addr +128, 992);
+        do Memory.poke(addr +160, -8);
+        do Memory.poke(addr +192, -15364);
+        do Memory.poke(addr +224, 454);
+        do Memory.poke(addr +256, 451);
+        do Memory.poke(addr +288, 867);
+        do Memory.poke(addr +320, 1043);
+        do Memory.poke(addr +352, 1040);
+        do Memory.poke(addr +384, 1040);
+        do Memory.poke(addr +416, -1);
+        do Memory.poke(addr +448, -4101);
+        do Memory.poke(addr +480, 14350);
+        return;
+    }
+
+    method void moveLeft(){
+        if (x = 0)  { return; }
+        let x = x - 1;
+        return;
+    }
+
+    method void moveRight(){
+        if (x = 31)  { return; }
+        let x = x + 1;
+        return;
+    }
+
+    method void moveUp(){
+        if (y = 0)  { return; }
+        let y = y - 1;
+        return;
+    }
+
+    method void moveDown(){
+        if (y = 12)  { return; }
+        let y = y + 1;
+        return;
+    }
+
+    // Advance the jump one frame; the method returns false once the jump cycle completes.
+    method boolean jump(){
+        var int i;
+        let i = 0;
+
+        if ((jmp > MAX_JMP) | ~(isJumpUp))  { let isJumpUp = false; }
+        if (isJumpUp) {
+            let i = 1;
+        }
+        if (~(isJumpUp))  {
+            let i = -1;
+        }
+        if ((jmp = 0) & ~(isJumpUp))  {
+            let jmp = 0;
+            let isJumpUp = true;
+            return false;
+        }
+        let jmp = jmp + i;
+        let y = y - i;
+        do moveRight();
+
+        return true;
+    }
+}

@@ -5,7 +5,7 @@ Personal course workspace for **Nand2Tetris / The Elements of Computing Systems*
 The repository is split into two main areas:
 
 - `part1/`: hardware projects, assembly programs, and the Hack assembler work
-- `part2/`: higher-level implementations, currently centered on the VM translator
+- `part2/`: higher-level implementations, including the VM translator work and a small Jack game project
 
 ## Repository Layout
 
@@ -26,12 +26,13 @@ The repository is split into two main areas:
 │       ├── project6/
 │       └── test_my_hack_assembler/
 └── part2/
-    └── Implementations/
-        ├── Implementations.slnx
-        ├── VMTranslator/
-        ├── tests/
-        ├── scripts/
-        └── submission/
+    ├── Implementations/
+    │   ├── Implementations.slnx
+    │   ├── VMTranslator/
+    │   ├── tests/
+    │   ├── scripts/
+    │   └── submission/
+    └── jack-project/
 ```
 
 ## Part 1
@@ -52,7 +53,7 @@ For assembler-specific usage, build, and test details, see:
 
 ## Part 2
 
-`part2/Implementations/` contains the current implementation work for the second half of the course.
+`part2/` contains the current implementation work for the second half of the course.
 
 Main areas:
 
@@ -60,16 +61,20 @@ Main areas:
 - `part2/Implementations/tests/VMTranslator.Tests/`: unit and integration tests for the translator
 - `part2/Implementations/scripts/`: helper scripts for installation and packaging
 - `part2/Implementations/submission/`: course submission artifacts and generated zip files
+- `part2/jack-project/`: a small Jack game prototype with source, generated VM output, and project documentation
 
 The VM translator currently focuses on:
 
-- translating a single `.vm` file into a sibling `.asm` file
+- translating one `.vm` file or one directory of `.vm` files into Hack assembly
 - streaming file input and output line by line
-- memory access, arithmetic, logical, comparison, and function commands
+- memory access, arithmetic, logical, comparison, program-flow, and function commands
 - command-line usage and packaging for local installs / course submissions
 
 For VM translator-specific details, see:
 [README.md](/Users/julesjuniormevaa/Desktop/learning/nand2tetris/part2/Implementations/VMTranslator/README.md)
+
+For the Jack project details, see:
+[README.md](/Users/julesjuniormevaa/Desktop/learning/nand2tetris/part2/jack-project/README.md)
 
 ## Common Commands
 
@@ -101,6 +106,12 @@ Run the VM translator from source:
 
 ```bash
 dotnet run --project part2/Implementations/VMTranslator/VMTranslator.csproj -- ./path/to/Program.vm
+```
+
+Compile the Jack project with the Nand2Tetris compiler:
+
+```bash
+bash ~/Downloads/nand2tetris/tools/JackCompiler.sh /Users/julesjuniormevaa/Desktop/learning/nand2tetris/part2/jack-project
 ```
 
 ## Submission Material

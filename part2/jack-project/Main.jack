@@ -1,0 +1,98 @@
+// Main owns the frame loop, input handling, collision checks, and game-over rendering.
+class Main {
+    function void main() {
+        var Player player;
+        var Cactus cactus;
+        var int key;
+        var boolean exit, isJumping;
+
+
+        let player = Player.new(0,12);
+        let cactus = Cactus.new(31);
+
+        let isJumping = false;
+        let exit = true;
+
+        do cactus.draw();
+        do player.draw();
+
+        // Each loop tick advances the cactus, handles player input, redraws the scene, and checks for collisions.
+        while (exit) {
+            do cactus.erase();
+            do cactus.move();
+            let key = Keyboard.keyPressed();
+
+            if (~(key = 0) & ~(isJumping)) {
+                do player.erase();
+
+                if (key = 130) { do player.moveLeft(); }
+                if (key = 132) { do player.moveRight(); }
+                if (key = 133) { do player.moveDown(); }
+                if (key = 140) { let exit = false; }
+
+                do player.draw();
+            }
+
+            if ((key = 32) | (key = 131) | (isJumping)) {
+                do player.erase();
+                let isJumping = player.jump();
+                do player.draw();
+            }
+            if ((key = 0) & ~isJumping)  {
+                do player.erase();
+                do player.moveLeft();
+                do player.draw();
+            }
+            do cactus.draw();
+            do Sys.wait(100);
+            let exit = Main.computeCollision(player, cactus);
+        }
+
+        do Main.drawGameOver(4174);
+
+        return;
+    }
+
+    // The collision rule is intentionally simple: horizontal overlap plus a low player position counts as a hit.
+    function boolean computeCollision(Player p, Cactus c) {
+        var int cmpY;
+        var boolean collideX;
+
+        let collideX = ((c.getx() - p.getx()) < 1) & ((c.getx() - p.getx()) > -1);
+        let cmpY = 12 - p.gety();
+
+        if (collideX & (p.gety() > 10)) {
+            return false;
+        }
+
+        return true;
+    }
+
+    // Draw a fixed "Game Over" message directly in screen memory.
+    function void drawGameOver(int location) {
+        var int memAddress;
+        let memAddress = 16384+location;
+        // column 0
+        do Memory.poke(memAddress, 10438);
+        do Memory.poke(memAddress +32, 21801);
+        do Memory.poke(memAddress +64, 17889);
+        do Memory.poke(memAddress +96, 17709);
+        do Memory.poke(memAddress +128, 17705);
+        do Memory.poke(memAddress +160, 17702);
+        // column 1
+        do Memory.poke(memAddress +1, -30322);
+        do Memory.poke(memAddress +33, -30143);
+        do Memory.poke(memAddress +65, 21063);
+        do Memory.poke(memAddress +97, 21057);
+        do Memory.poke(memAddress +129, 21057);
+        do Memory.poke(memAddress +161, 8590);
+        // column 2
+        do Memory.poke(memAddress +2, 412);
+        do Memory.poke(memAddress +34, 578);
+        do Memory.poke(memAddress +66, 590);
+        do Memory.poke(memAddress +98, 450);
+        do Memory.poke(memAddress +130, 578);
+        do Memory.poke(memAddress +162, 604);
+        return;
+    }
+}

@@ -3,16 +3,17 @@
 
 A small C# implementation of the Nand2Tetris VM translator for part 2 of the course work.
 
-The project currently translates a single `.vm` file into a sibling `.asm` file and focuses on streaming I/O, command-line usage, and line-by-line translation.
+The project translates either a single `.vm` file or a directory of `.vm` files into Hack assembly while keeping the I/O flow streamed and failure-safe.
 
 ## What It Does
 
-- Accepts one `.vm` file path as input
+- Accepts either a `.vm` file path or a directory containing `.vm` files
 - Supports relative and absolute paths
-- Reads the source file line by line
-- Writes the translated Hack assembly line by line into a file with the same name and an `.asm` extension
+- Reads each source file line by line
+- Writes the translated Hack assembly line by line into a sibling `.asm` file
 - Stops immediately on translation errors
 - Deletes the destination file if translation fails partway through
+- Emits bootstrap code for directory translation and calls `Sys.init`
 - Emits readable assembly comments, including structured `begin` / `end` blocks for function and program-flow commands
 - Provides a help command, colored console output, and a simple loader while translation is running
 
@@ -53,16 +54,23 @@ From the repository root:
 dotnet run --project part2/Implementations/VMTranslator/VMTranslator.csproj -- ./path/to/Program.vm
 ```
 
-You can also use an absolute path:
+You can also pass a directory to translate all top-level `.vm` files into one assembly output named after that directory:
+
+```bash
+dotnet run --project part2/Implementations/VMTranslator/VMTranslator.csproj -- ./path/to/ProgramFolder
+```
+
+You can use an absolute path for either form:
 
 ```bash
 dotnet run --project part2/Implementations/VMTranslator/VMTranslator.csproj -- /absolute/path/to/Program.vm
 ```
 
-The generated output will be created next to the source file:
+The generated output will be created next to the source:
 
 ```text
 Program.vm  ->  Program.asm
+ProgramFolder/  ->  ProgramFolder/ProgramFolder.asm
 ```
 
 ### Help
@@ -79,11 +87,21 @@ The installed command name is `vm-translator`, so after installation you can run
 
 ```bash
 vm-translator ./file.vm
+vm-translator ./ProgramFolder
 ```
 
 The install scripts publish the app into a user-local application folder and place a small launcher command in your local bin directory.
 This requires the .NET runtime/SDK to be available on the target machine.
 The project logo comes from `logo.png`, and the Windows executable icon is generated from it via `logo.ico`.
+
+## Recent Changes
+
+- Added program-flow translation for `label`, `goto`, and `if-goto`
+- Added function-level translation for `function`, `call`, and `return`
+- Added directory translation with bootstrap initialization and automatic `Sys.init` call
+- Fixed static symbol generation to use the actual VM source file name
+- Refactored the C# translator to make the translation paths easier to read and extend
+- Updated the CLI help text and runtime behavior documentation to match the current command surface
 
 ### macOS and Linux
 
@@ -179,7 +197,7 @@ The test suite currently covers:
 - Memory access, arithmetic, logical, and comparison translation
 - Function, call, and return translation
 - Program flow translation for `label`, `goto`, and `if-goto`
-- End-to-end CLI behavior, output generation, and failure cleanup
+- Single-file and directory CLI behavior, bootstrap emission, output generation, and failure cleanup
 
 Publish a release build manually for the current machine:
 
@@ -189,16 +207,13 @@ dotnet publish part2/Implementations/VMTranslator/VMTranslator.csproj -c Release
 
 ## Current Limitations
 
-- The CLI currently translates a single `.vm` file, not a whole directory of VM files.
-- Static symbols are emitted with a placeholder file prefix like `FileName.3`.
-  This is enough for the current project shape, but a multi-file translator should derive the prefix from the actual source file name.
-- Bootstrap code for multi-file translation is not emitted yet.
+- Directory translation only reads top-level `.vm` files; it does not recurse into nested folders.
+- Directory bootstrap currently assumes the program should call `Sys.init`.
 - The translator logic is concentrated in `HackVmLineTranslator`.
   As the project grows, it may be worth separating parsing, validation, and code generation into smaller components.
 
 ## Next Steps
 
-- Support directory-level translation
-- Use the source file name automatically for static symbols
-- Add bootstrap code when translating multi-file VM programs
+- Add support for scoped labels tied to the current function context
+- Extend the CLI validation and error messages for malformed multi-file program setups
 - Split the translator into parser + code-writer layers
