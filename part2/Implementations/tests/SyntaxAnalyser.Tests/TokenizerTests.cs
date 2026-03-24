@@ -80,6 +80,13 @@ public class TokenizerTests
     }
 
     [Fact]
+    public void Tokenize_ThrowInvalidOperationException_WhenIdentifierContainsNonAsciiCharacters()
+    {
+        var tokenizer = new Tokenizer("naïve");
+        Assert.Throws<InvalidOperationException>(() => _ = tokenizer.CurrentToken);
+    }
+
+    [Fact]
     public void Tokenize_ThrowInvalidOperationException_WhenStringContainsANewLine()
     {
         var tokenizer = new Tokenizer(
@@ -91,27 +98,85 @@ public class TokenizerTests
         Assert.Throws<InvalidOperationException>(() => _ = tokenizer.CurrentToken);
     }
 
-    [Fact]
-    public void Tokenize_ThrowInvalidOperationException_WhenIdentifierContainsNonAsciiCharacters()
+    [Theory]
+    [InlineData("   let")]
+    [InlineData("/* comment */ let")]
+    [InlineData("// comment\nlet")]
+    public void HasMoreTokens_ReturnTrue_WhenATokenExistsAfterIgnoredContent(string code)
     {
-        var tokenizer = new Tokenizer("naïve");
-        Assert.Throws<InvalidOperationException>(() => _ = tokenizer.CurrentToken);
+        ITokenizer tokenizer = new Tokenizer(code);
+
+        Assert.True(tokenizer.HasMoreTokens);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("/* comment */   ")]
+    [InlineData("// comment")]
+    public void HasMoreTokens_ReturnFalse_WhenInputContainsOnlyIgnoredContent(string code)
+    {
+        ITokenizer tokenizer = new Tokenizer(code);
+
+        Assert.False(tokenizer.HasMoreTokens);
     }
 
     [Fact]
-    public void TokenizerInterface_ExposeAdvanceMethod()
+    public void Advance_ReturnTokensInOrder_AndSkipsIgnoredContent()
     {
-        var advanceMethod = typeof(ITokenizer).GetMethod("Advance");
-        Assert.NotNull(advanceMethod);
+        ITokenizer tokenizer = new Tokenizer("  let /* comment */ count = 10; // trailing");
+
+        var tokens = new[]
+        {
+            tokenizer.Advance(),
+            tokenizer.Advance(),
+            tokenizer.Advance(),
+            tokenizer.Advance(),
+            tokenizer.Advance(),
+        };
+
+        Assert.Equal(
+            [
+                new Token(TokenType.Keyword, "let"),
+                new Token(TokenType.Identifier, "count"),
+                new Token(TokenType.Symbol, "="),
+                new Token(TokenType.IntegerConstant, "10"),
+                new Token(TokenType.Symbol, ";"),
+            ],
+            tokens);
+        Assert.False(tokenizer.HasMoreTokens);
     }
 
     [Fact]
-    public void TokenizerInterface_ExposeHasMoreTokensMember()
+    public void CurrentToken_ReturnsSameToken_UntilAdvanceIsCalled()
     {
-        var hasMoreTokensMethod = typeof(ITokenizer).GetMethod("HasMoreTokens");
-        var hasMoreTokensProperty = typeof(ITokenizer).GetProperty("HasMoreTokens");
+        ITokenizer tokenizer = new Tokenizer("let count;");
 
-        Assert.True(hasMoreTokensMethod is not null || hasMoreTokensProperty is not null);
+        Assert.Equal(new Token(TokenType.Keyword, "let"), tokenizer.CurrentToken);
+        Assert.Equal(new Token(TokenType.Keyword, "let"), tokenizer.CurrentToken);
+
+        tokenizer.Advance();
+
+        Assert.Equal(new Token(TokenType.Identifier, "count"), tokenizer.CurrentToken);
+    }
+
+    [Fact]
+    public void Eat_ReturnMatchingToken_AndAdvanceToNextToken()
+    {
+        ITokenizer tokenizer = new Tokenizer("let count;");
+
+        var token = tokenizer.Eat("let");
+
+        Assert.Equal(new Token(TokenType.Keyword, "let"), token);
+        Assert.Equal(new Token(TokenType.Identifier, "count"), tokenizer.CurrentToken);
+    }
+
+    [Fact]
+    public void Eat_ThrowInvalidOperationException_WhenCurrentTokenDoesNotMatch()
+    {
+        ITokenizer tokenizer = new Tokenizer("return;");
+
+        Assert.Throws<InvalidOperationException>(() => tokenizer.Eat("let"));
     }
 
     public static TheoryData<string, Token> IntegerConstant => new()

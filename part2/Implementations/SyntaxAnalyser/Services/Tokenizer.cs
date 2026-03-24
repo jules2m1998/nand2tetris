@@ -5,56 +5,106 @@ namespace SyntaxAnalyser.Services;
 
 public partial class Tokenizer(string code) : ITokenizer
 {
-    private int _index = 0;
+    private int _index;
 
-    private readonly IDictionary<Regex, TokenType?> _tokenMap = new Dictionary<Regex, TokenType?>
-    {
-        [OnelineCommentRegex()] = null,
-        [MultilinesCommentRegex()] = null,
-        [WhiteSpaceRegex()] = null,
-        [KeywordRegex()] = TokenType.Keyword,
-        [SymbolRegex()] = TokenType.Symbol,
-        [IntegerConstantRegex()] = TokenType.IntegerConstant,
-        [StringConstantRegex()] = TokenType.StringConstant,
-        [IdentifierRegex()] = TokenType.Identifier,
-    };
+    private readonly Regex[] _ignoredRules =
+    [
+        OnelineCommentRegex(),
+        MultilinesCommentRegex(),
+        WhiteSpaceRegex(),
+    ];
+
+    private readonly (Regex Regex, TokenType Type)[] _tokenRules =
+    [
+        (KeywordRegex(), TokenType.Keyword),
+        (SymbolRegex(), TokenType.Symbol),
+        (IntegerConstantRegex(), TokenType.IntegerConstant),
+        (StringConstantRegex(), TokenType.StringConstant),
+        (IdentifierRegex(), TokenType.Identifier),
+    ];
 
     public Token CurrentToken
     {
         get
         {
-            foreach (var (key, value) in _tokenMap)
+            _index = SkipIgnored(_index);
+
+            foreach (var (regex, type) in _tokenRules)
             {
                 var current = code[_index..];
-                var match = key.Match(current);
+                var match = regex.Match(current);
                 if (!match.Success)
                     continue;
+
                 var token = match.Value;
-                if (value != null)
-                    return new Token(value.Value, token);
-                _index += token.Length;
-                return CurrentToken;
+                ValidateToken(type, token);
+                return new Token(type, token);
             }
 
-            throw new InvalidOperationException($"Invalid token {code[_index..]}");
+            var remaining = code[_index..];
+            var preview = remaining.Length > 20 ? remaining[..20] : remaining;
+            throw new InvalidOperationException($"Invalid token near '{preview}' at index {_index}");
         }
     }
+    
+    private int SkipIgnored(int index)
+    {
+        while (index < code.Length)
+        {
+            var current = code[index..];
+            var matchedIgnoredToken = false;
 
-    [GeneratedRegex(@"^\d+")]
+            foreach (var ignoredRule in _ignoredRules)
+            {
+                var match = ignoredRule.Match(current);
+                if (!match.Success)
+                    continue;
+
+                index += match.Length;
+                matchedIgnoredToken = true;
+                break;
+            }
+
+            if (!matchedIgnoredToken)
+                break;
+        }
+
+        return index;
+    }
+
+    public bool HasMoreTokens => SkipIgnored(_index) < code.Length;
+    
+    public Token Advance()
+    {
+        var token = CurrentToken;
+        _index += token.Value.Length;
+        return token;
+    }
+    
+    public Token Eat(string token)
+    {
+        if (HasMoreTokens &&  CurrentToken.Value == token)
+        {
+            return Advance();
+        }
+        throw new InvalidOperationException($"Invalid token near '{token}' at index {_index}");
+    }
+
+    [GeneratedRegex(@"^\d+\b")]
     private static partial Regex IntegerConstantRegex();
 
-    [GeneratedRegex(@"^(?!\d)\w+")]
+    [GeneratedRegex(@"^[A-Za-z_][A-Za-z0-9_]*\b")]
     private static partial Regex IdentifierRegex();
 
     [GeneratedRegex("""
-                    ^"[^"]*"
+                    ^"[^"\r\n]*"
                     """)]
     private static partial Regex StringConstantRegex();
 
     [GeneratedRegex(@"^(?:[{}()\[\].,;+\-*&|<>=~]|/(?![/*]))")]
     private static partial Regex SymbolRegex();
 
-    [GeneratedRegex("^(class|constructor|function|method|field|static|var|int|char|boolean|void|true|false|null|this|let|do|if|else|while|return)")]
+    [GeneratedRegex(@"^(class|constructor|function|method|field|static|var|int|char|boolean|void|true|false|null|this|let|do|if|else|while|return)\b")]
     private static partial Regex KeywordRegex();
 
     [GeneratedRegex(@"^//[^\r\n]*")]
@@ -65,4 +115,13 @@ public partial class Tokenizer(string code) : ITokenizer
 
     [GeneratedRegex(@"^\s+")]
     private static partial Regex WhiteSpaceRegex();
+
+    private void ValidateToken(TokenType type, string token)
+    {
+        if (type != TokenType.IntegerConstant)
+            return;
+
+        if (!int.TryParse(token, out var number) || number > 32767)
+            throw new InvalidOperationException($"Integer constant out of range near '{token}' at index {_index}");
+    }
 }
