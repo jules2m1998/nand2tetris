@@ -313,7 +313,7 @@ public class CompilerEngine(ITokenizer tokenizer) : ICompilerEngine
         
         while (tokenizer.CurrentToken.Value == ".")
         {
-            builder.AppendLine(tokenizer.Symbol.ToString());
+            builder.AppendLine(ApplyCurrent(tokenizer.Symbol.ToString()));
             tokenizer.Advance();
             
             identifier = tokenizer.Identifier;
@@ -324,14 +324,7 @@ public class CompilerEngine(ITokenizer tokenizer) : ICompilerEngine
         var openBracket = tokenizer.Eat("(");
         builder.AppendLine(ApplyCurrent(openBracket.Value, openBracket.Type));
         
-        builder.AppendLines(CompileExpression());
-        while (tokenizer.CurrentToken.Value == ",")
-        {
-            builder.AppendLine(tokenizer.Symbol.ToString());
-            tokenizer.Advance();
-            
-            builder.AppendLines(CompileExpression());
-        }
+        builder.AppendLines(CompileExpressionList());
         
         var closeBracket = tokenizer.Eat(")");
         builder.AppendLine(ApplyCurrent(closeBracket.Value, closeBracket.Type));
@@ -360,12 +353,13 @@ public class CompilerEngine(ITokenizer tokenizer) : ICompilerEngine
 
         if (tokenizer.Symbol == '[')
         {
-            builder.AppendLine(tokenizer.Symbol.ToString());
+            builder.AppendLine(ApplyCurrent(tokenizer.Symbol.ToString()));
             tokenizer.Advance();
             
             builder.AppendLines(CompileExpression());
             
-            builder.AppendLine(tokenizer.Symbol.ToString());
+            builder.AppendLine(ApplyCurrent(tokenizer.Symbol.ToString()));
+            tokenizer.Advance();
         }
         var eq =  tokenizer.Eat("=");
         builder.AppendLine(ApplyCurrent(eq.Value, eq.Type));
@@ -424,7 +418,7 @@ public class CompilerEngine(ITokenizer tokenizer) : ICompilerEngine
     
     public string CompileIf()
     {
-        var builder = OpenXmlWriter("<whileStatement>");
+        var builder = OpenXmlWriter("<ifStatement>");
         
         
         var firstToken = tokenizer.Eat("if");
@@ -444,14 +438,6 @@ public class CompilerEngine(ITokenizer tokenizer) : ICompilerEngine
         
         builder.AppendLines(CompileStatements());
         
-        while (tokenizer.CurrentToken.Value == ",")
-        {
-            builder.AppendLine(tokenizer.Symbol.ToString());
-            tokenizer.Advance();
-            
-            builder.AppendLines(CompileExpression());
-        }
-        
         var closeCurlyBrace = tokenizer.Eat("}");
         builder.AppendLine(ApplyCurrent(closeCurlyBrace.Value, closeCurlyBrace.Type));
 
@@ -460,7 +446,7 @@ public class CompilerEngine(ITokenizer tokenizer) : ICompilerEngine
             builder.AppendLines(CompileElse());
         }
         
-        CloseXmlWriter(builder, "</whileStatement>");
+        CloseXmlWriter(builder, "</ifStatement>");
         return builder.ToString();
     }
 
@@ -486,12 +472,24 @@ public class CompilerEngine(ITokenizer tokenizer) : ICompilerEngine
     {
         var builder = OpenXmlWriter("<expression>");
         var term = CompileTerm();
-        if (string.IsNullOrEmpty(term))
+        if (string.IsNullOrEmpty(term) && tokenizer.CurrentToken.Value != "-")
         {
             return string.Empty;
         }
+        else if (string.IsNullOrEmpty(term) && tokenizer.CurrentToken.Value == "-")
+        {
+            builder.AppendLine("<term>");
+            
+            var symbol = tokenizer.Symbol;
+            builder.AppendLine(ApplyCurrent(symbol.ToString()));
+            tokenizer.Advance();
+            
+            builder.AppendLines(CompileTerm());
+            
+            builder.AppendLine("</term>");
+        }
         builder.AppendLines(term);
-        string[] ops = ["+", "-", "*", "/", "&", "|", "<", ">", "=", "-", "~"];
+        string[] ops = ["+", "-", "*", "/", "&", "|", "<", ">", "=", "~"];
         var opMap = new Dictionary<char, string>
         {
             ['<'] = "&lt;",
@@ -531,7 +529,7 @@ public class CompilerEngine(ITokenizer tokenizer) : ICompilerEngine
         } 
         else if (tokenizer.TokenType is TokenType.IntegerConstant ||
             tokenizer.TokenType == TokenType.Keyword && acceptedKeywordConst.Contains(tokenizer.CurrentToken.Value) || 
-            tokenizer is { TokenType: TokenType.Symbol, CurrentToken.Value: "-" or "~" })
+            tokenizer is { TokenType: TokenType.Symbol, CurrentToken.Value: "~" })
         {
             builder.AppendLine(ApplyCurrent(tokenizer.CurrentToken.Value));
             tokenizer.Advance();
