@@ -1,4 +1,4 @@
-using SyntaxAnalyser.Absttractions;
+using SyntaxAnalyser.Abstractions;
 using SyntaxAnalyser.Models;
 using System.Text.RegularExpressions;
 namespace SyntaxAnalyser.Services;
@@ -89,6 +89,12 @@ public partial class Tokenizer(string code) : ITokenizer
         }
         throw new InvalidOperationException($"Invalid token near '{token}' at index {_index}");
     }
+    public TokenType TokenType => CurrentToken.Type;
+    public string StringValue => CurrentToken.Type == TokenType.StringConstant ?  CurrentToken.Value.Replace("\"", "") : throw new InvalidOperationException("You can't perform this action on non string value");
+    public int IntValue => CurrentToken.Type == TokenType.IntegerConstant ?  int.Parse(CurrentToken.Value) : throw new InvalidOperationException("You can't perform this action on non int value");
+    public string KeyWord => CurrentToken.Type == TokenType.Keyword ?  CurrentToken.Value : throw new InvalidOperationException("You can't perform this action on non keyword value");
+    public char Symbol => CurrentToken.Type == TokenType.Symbol ? CurrentToken.Value.ElementAt(0) : throw new InvalidOperationException("You can't perform this action on symbol value");
+    public string Identifier => CurrentToken.Type == TokenType.Identifier ? CurrentToken.Value : throw new InvalidOperationException("You can't perform this action on non identifier");
 
     [GeneratedRegex(@"^\d+\b")]
     private static partial Regex IntegerConstantRegex();

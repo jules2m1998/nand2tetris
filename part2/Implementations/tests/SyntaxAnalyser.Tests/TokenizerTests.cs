@@ -1,4 +1,4 @@
-using SyntaxAnalyser.Absttractions;
+using SyntaxAnalyser.Abstractions;
 using SyntaxAnalyser.Models;
 using SyntaxAnalyser.Services;
 namespace SyntaxAnalyser.Tests;

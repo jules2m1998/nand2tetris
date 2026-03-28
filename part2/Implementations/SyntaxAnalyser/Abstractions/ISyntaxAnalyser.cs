@@ -1,4 +1,4 @@
-namespace SyntaxAnalyser.Absttractions;
+namespace SyntaxAnalyser.Abstractions;
 
 public interface ISyntaxAnalyser
 {
