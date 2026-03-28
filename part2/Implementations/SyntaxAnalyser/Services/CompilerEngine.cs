@@ -67,7 +67,7 @@ public class CompilerEngine(ITokenizer tokenizer) : ICompilerEngine
     {
         var builder = new StringBuilder();
         builder.Append(GetOpenTag(currentTokenType ?? tokenizer.TokenType));
-        builder.Append($" {value} ");
+        builder.Append($" {EscapeXml(value)} ");
         builder.Append(GetCloseTag(currentTokenType ?? tokenizer.TokenType));
         return builder.ToString();
     }
@@ -80,9 +80,10 @@ public class CompilerEngine(ITokenizer tokenizer) : ICompilerEngine
         builder.AppendLine(ApplyCurrent(keyword));
         tokenizer.Advance();
 
-        if (tokenizer.HasMoreTokens && (tokenizer.CurrentToken.Type == TokenType.Identifier || tokenizer.CurrentToken.Type == TokenType.Keyword && tokenizer.KeyWord is "int" or "boolean" or "char"))
+        var type = TryCompileType();
+        if (type != null)
         {
-            builder.AppendLine(ApplyCurrent(tokenizer.CurrentToken.Value));
+            builder.AppendLine(type);
             tokenizer.Advance();
         }
         else
@@ -122,7 +123,7 @@ public class CompilerEngine(ITokenizer tokenizer) : ICompilerEngine
         builder.AppendLine(ApplyCurrent(keyword));
         tokenizer.Advance();
             
-        var type = EatType();
+        var type = TryCompileType(allowVoid: true);
         if (type == null)
         {
             throw  new Exception("Expected identifier or a token");
@@ -170,18 +171,33 @@ public class CompilerEngine(ITokenizer tokenizer) : ICompilerEngine
         return builder.ToString();
     }
 
-    private string? EatType()
+    private static string EscapeXml(string value)
     {
-        
-        string[] acceptedKeyword = ["int", "boolean", "char", "void"];
-        if (
-            tokenizer is { HasMoreTokens: true, CurrentToken.Type: TokenType.Identifier or TokenType.Keyword } || 
-            (tokenizer.TokenType == TokenType.Identifier && acceptedKeyword.Contains(tokenizer.CurrentToken.Value))
-        )
+        return value
+            .Replace("&", "&amp;")
+            .Replace("<", "&lt;")
+            .Replace(">", "&gt;");
+    }
+
+    private string? TryCompileType(bool allowVoid = false)
+    {
+        if (!tokenizer.HasMoreTokens)
+        {
+            return null;
+        }
+
+        if (tokenizer.TokenType == TokenType.Identifier)
         {
             return ApplyCurrent(tokenizer.CurrentToken.Value);
         }
-        return null;
+
+        string[] acceptedKeyword = allowVoid
+            ? ["int", "boolean", "char", "void"]
+            : ["int", "boolean", "char"];
+
+        return tokenizer.TokenType == TokenType.Keyword && acceptedKeyword.Contains(tokenizer.CurrentToken.Value)
+            ? ApplyCurrent(tokenizer.CurrentToken.Value)
+            : null;
     }
 
     public string CompileParameterList()
@@ -189,7 +205,12 @@ public class CompilerEngine(ITokenizer tokenizer) : ICompilerEngine
         var builder = new XmlWriter();
         builder.AppendLine("<parameterList>");
         builder.Indent();
-        while (EatType() != null)
+        if (tokenizer.CurrentToken.Value != ")" && TryCompileType() == null)
+        {
+            throw new Exception("Expected identifier or a token");
+        }
+
+        while (TryCompileType() != null)
         {
             builder.Append(CompileParameter());
         }
@@ -203,7 +224,7 @@ public class CompilerEngine(ITokenizer tokenizer) : ICompilerEngine
         var builder = new XmlWriter();
         
         // write the type
-        var type = EatType();
+        var type = TryCompileType();
         if (type == null)
         {
             throw  new Exception("Expected identifier or a token");
@@ -233,9 +254,9 @@ public class CompilerEngine(ITokenizer tokenizer) : ICompilerEngine
 
         var vaL = tokenizer.Eat("var");
         builder.AppendLine(ApplyCurrent(vaL.Value, vaL.Type));
+
         
-        
-        var type = EatType();
+        var type = TryCompileType();
         if (type == null)
             throw  new Exception("Expected identifier or a token");
         builder.AppendLine(type);
@@ -490,17 +511,11 @@ public class CompilerEngine(ITokenizer tokenizer) : ICompilerEngine
         }
         builder.AppendLines(term);
         string[] ops = ["+", "-", "*", "/", "&", "|", "<", ">", "=", "~"];
-        var opMap = new Dictionary<char, string>
-        {
-            ['<'] = "&lt;",
-            ['>'] = "&gt;",
-            ['&'] = "&amp;",
-        };
         
         while (tokenizer.TokenType == TokenType.Symbol && ops.Contains(tokenizer.CurrentToken.Value))
         {
             var symbol = tokenizer.Symbol;
-            builder.AppendLine(opMap.TryGetValue(symbol, out var value) ? ApplyCurrent(value) : ApplyCurrent(symbol.ToString()));
+            builder.AppendLine(ApplyCurrent(symbol.ToString()));
             tokenizer.Advance();
 
             builder.AppendLines(CompileTerm());
