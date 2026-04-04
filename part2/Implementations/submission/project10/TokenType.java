@@ -1,0 +1,7 @@
+enum TokenType {
+    INTEGER_CONSTANT,
+    STRING_CONSTANT,
+    IDENTIFIER,
+    SYMBOL,
+    KEYWORD
+}

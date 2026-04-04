@@ -13,4 +13,5 @@ public interface ITokenizer
     string Identifier { get; }
     int IntValue { get; }
     string StringValue { get; }
+    int Index { get; }
 }

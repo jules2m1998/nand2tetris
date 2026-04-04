@@ -16,4 +16,5 @@ public interface ICompilerEngine
     string CompileExpression();
     string CompileTerm();
     string CompileExpressionList();
+    string CompileSubroutineBody();
 }

@@ -5,7 +5,8 @@ namespace SyntaxAnalyser.Services;
 
 public partial class Tokenizer(string code) : ITokenizer
 {
-    private int _index;
+
+    public int Index { get; private set; }
 
     private readonly Regex[] _ignoredRules =
     [
@@ -27,11 +28,11 @@ public partial class Tokenizer(string code) : ITokenizer
     {
         get
         {
-            _index = SkipIgnored(_index);
+            Index = SkipIgnored(Index);
 
             foreach (var (regex, type) in _tokenRules)
             {
-                var current = code[_index..];
+                var current = code[Index..];
                 var match = regex.Match(current);
                 if (!match.Success)
                     continue;
@@ -41,9 +42,9 @@ public partial class Tokenizer(string code) : ITokenizer
                 return new Token(type, token);
             }
 
-            var remaining = code[_index..];
+            var remaining = code[Index..];
             var preview = remaining.Length > 20 ? remaining[..20] : remaining;
-            throw new InvalidOperationException($"Invalid token near '{preview}' at index {_index}");
+            throw new InvalidOperationException($"Invalid token near '{preview}' at index {Index}");
         }
     }
     
@@ -72,12 +73,12 @@ public partial class Tokenizer(string code) : ITokenizer
         return index;
     }
 
-    public bool HasMoreTokens => SkipIgnored(_index) < code.Length;
+    public bool HasMoreTokens => SkipIgnored(Index) < code.Length;
     
     public Token Advance()
     {
         var token = CurrentToken;
-        _index += token.Value.Length;
+        Index += token.Value.Length;
         return token;
     }
     
@@ -87,7 +88,7 @@ public partial class Tokenizer(string code) : ITokenizer
         {
             return Advance();
         }
-        throw new InvalidOperationException($"Invalid token near '{token}' at index {_index}");
+        throw new InvalidOperationException($"Invalid token near '{token}' at index {Index}");
     }
     public TokenType TokenType => CurrentToken.Type;
     public string StringValue => CurrentToken.Type == TokenType.StringConstant ?  CurrentToken.Value.Replace("\"", "") : throw new InvalidOperationException("You can't perform this action on non string value");
@@ -128,6 +129,6 @@ public partial class Tokenizer(string code) : ITokenizer
             return;
 
         if (!int.TryParse(token, out var number) || number > 32767)
-            throw new InvalidOperationException($"Integer constant out of range near '{token}' at index {_index}");
+            throw new InvalidOperationException($"Integer constant out of range near '{token}' at index {Index}");
     }
 }

@@ -148,7 +148,7 @@ public class CompilerEngine(ITokenizer tokenizer) : ICompilerEngine
         return builder.ToString();
     }
     
-    private string CompileSubroutineBody()
+    public string CompileSubroutineBody()
     {
         var builder = OpenXmlWriter("<subroutineBody>");
         var curlyBrace = tokenizer.Eat("{");
@@ -497,7 +497,7 @@ public class CompilerEngine(ITokenizer tokenizer) : ICompilerEngine
         {
             return string.Empty;
         }
-        else if (string.IsNullOrEmpty(term) && tokenizer.CurrentToken.Value == "-")
+        if (string.IsNullOrEmpty(term) && tokenizer.CurrentToken.Value == "-")
         {
             builder.AppendLine("<term>");
             
