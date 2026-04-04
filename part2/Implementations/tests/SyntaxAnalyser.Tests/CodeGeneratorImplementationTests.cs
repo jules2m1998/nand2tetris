@@ -333,8 +333,8 @@ public class CodeGeneratorImplementationTests
 
         Project11TestSupport.AssertVmEquivalent(
             """
-            push local 0
             push local 1
+            push local 0
             add
             push local 2
             pop temp 0
@@ -382,8 +382,8 @@ public class CodeGeneratorImplementationTests
         var actual = generator.CompileIf();
         var lines = Project11TestSupport.NormalizeVm(actual);
 
-        Assert.Contains(lines, line => line.StartsWith("label if.", StringComparison.Ordinal));
-        Assert.Contains(lines, line => line.StartsWith("label else.", StringComparison.Ordinal));
+        Assert.Contains(lines, line => line.StartsWith("label IF_TRUE", StringComparison.Ordinal));
+        Assert.Contains(lines, line => line.StartsWith("label IF_FALSE", StringComparison.Ordinal));
         Assert.Contains(lines, line => line == "push local 0");
         Assert.Contains(lines, line => line.StartsWith("if-goto ", StringComparison.Ordinal));
         Assert.Contains(lines, line => line.StartsWith("goto ", StringComparison.Ordinal));
@@ -411,8 +411,8 @@ public class CodeGeneratorImplementationTests
         var lines = Project11TestSupport.NormalizeVm(actual);
 
         Assert.True(lines.Count(line => line.StartsWith("label ", StringComparison.Ordinal)) >= 2);
-        Assert.Contains(lines, line => line.StartsWith("label while.", StringComparison.Ordinal));
-        Assert.Contains(lines, line => line.StartsWith("label end.while.", StringComparison.Ordinal));
+        Assert.Contains(lines, line => line.StartsWith("label WHILE_EXP", StringComparison.Ordinal));
+        Assert.Contains(lines, line => line.StartsWith("label WHILE_END", StringComparison.Ordinal));
         Assert.Contains(lines, line => line == "push local 0");
         Assert.Contains(lines, line => line.StartsWith("if-goto ", StringComparison.Ordinal));
         Assert.Contains(lines, line => line == "push constant 0");
@@ -540,8 +540,8 @@ public class CodeGeneratorImplementationTests
             },
             null,
             """
-            push local 0
             push local 1
+            push local 0
             add
             pop pointer 1
             push that 0

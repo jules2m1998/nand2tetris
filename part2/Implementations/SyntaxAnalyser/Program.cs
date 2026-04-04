@@ -19,18 +19,35 @@ static async Task<int> RunAsync(string[] arguments)
 
         foreach (var jackFile in jackFiles)
         {
-            var destinationPath = Path.ChangeExtension(jackFile, ".xml");
+            var xmlPath = Path.ChangeExtension(jackFile, ".xml");
+            var vmPath = Path.ChangeExtension(jackFile, ".vm");
 
             Console.WriteLine($"Analyzing {Path.GetFileName(jackFile)}");
 
             var source = await File.ReadAllTextAsync(jackFile);
-            var engine = new CompilerEngine(new Tokenizer(source));
-            var xml = engine.CompileClass();
+            var vmGenerator = new CodeGenerator(new Tokenizer(source));
+            var vm = vmGenerator.CompileClass();
 
-            await File.WriteAllTextAsync(destinationPath, xml);
-            writtenFiles.Add(destinationPath);
+            await File.WriteAllTextAsync(vmPath, vm);
+            writtenFiles.Add(vmPath);
+            Console.WriteLine($"Created {Path.GetFileName(vmPath)}");
 
-            Console.WriteLine($"Created {Path.GetFileName(destinationPath)}");
+            try
+            {
+                var xmlEngine = new CompilerEngine(new Tokenizer(source));
+                var xml = xmlEngine.CompileClass();
+
+                await File.WriteAllTextAsync(xmlPath, xml);
+                writtenFiles.Add(xmlPath);
+                Console.WriteLine($"Created {Path.GetFileName(xmlPath)}");
+            }
+            catch
+            {
+                if (File.Exists(xmlPath))
+                {
+                    File.Delete(xmlPath);
+                }
+            }
         }
 
         Console.WriteLine($"Analysis completed: {jackFiles.Length} file(s).");
@@ -82,5 +99,5 @@ static void PrintUsage()
     Console.WriteLine("syntax-analyser");
     Console.WriteLine("Usage:");
     Console.WriteLine("  syntax-analyser <path-to-jack-file-or-directory>");
-    Console.WriteLine("Analyze Jack source and generate sibling XML parse files.");
+    Console.WriteLine("Analyze Jack source and generate sibling VM files.");
 }

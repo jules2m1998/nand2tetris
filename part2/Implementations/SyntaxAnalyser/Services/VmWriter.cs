@@ -1,29 +1,49 @@
 using System.Text;
+
 namespace SyntaxAnalyser.Services;
 
 public class VmWriter
 {
-    private readonly StringBuilder _sb = new();
-    private int _indent;
+    private readonly StringBuilder _builder = new();
 
-    public void Indent() => _indent++;
-    public void Unindent() => _indent--;
+    public void WritePush(string segment, int index) => AppendCommand($"push {segment} {index}");
 
-    public void AppendLine(string text)
-    {
-        _sb.Append(new string('\t', _indent));
-        _sb.AppendLine(text);
-    }
-    
-    public void Append(string text) => _sb.Append(text);
+    public void WritePop(string segment, int index) => AppendCommand($"pop {segment} {index}");
+
+    public void WriteArithmetic(string command) => AppendCommand(command);
+
+    public void WriteLabel(string label) => AppendCommand($"label {label}");
+
+    public void WriteGoto(string label) => AppendCommand($"goto {label}");
+
+    public void WriteIf(string label) => AppendCommand($"if-goto {label}");
+
+    public void WriteCall(string name, int argCount) => AppendCommand($"call {name} {argCount}");
+
+    public void WriteFunction(string name, int localCount) => AppendCommand($"function {name} {localCount}");
+
+    public void WriteReturn() => AppendCommand("return");
+
+    public void AppendLine(string text) => AppendCommand(text);
+
     public void AppendLines(string text)
     {
-        foreach (var line in text.Split("\n"))
+        if (string.IsNullOrWhiteSpace(text))
+            return;
+
+        foreach (var line in text.Replace("\r\n", "\n").Split('\n', StringSplitOptions.RemoveEmptyEntries))
         {
-            AppendLine(line);
+            AppendCommand(line.Trim());
         }
     }
 
-    public override string ToString() => _sb.ToString();
-    
+    public override string ToString() => _builder.ToString();
+
+    private void AppendCommand(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return;
+
+        _builder.AppendLine(text.Trim());
+    }
 }
