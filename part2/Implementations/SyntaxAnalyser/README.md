@@ -1,27 +1,28 @@
 # syntax-analyser
 
-A small C# implementation of the Nand2Tetris syntax analyser for project 10.
+A C# Jack compiler workspace for nand2tetris Projects 10 and 11.
 
-The project accepts either a single `.jack` file or a directory of `.jack` files and generates the XML parse tree output expected by the book's compare tools.
+The CLI accepts either a single `.jack` file or a directory of top-level `.jack` files. It generates sibling `.vm` output for code generation and also attempts to emit sibling `.xml` parse-tree output for the syntax-analysis side.
 
 ## What It Does
 
 - Accepts either a `.jack` file path or a directory containing `.jack` files
 - Supports relative and absolute paths
-- Parses Jack source using the tokenizer and compilation engine from this project
-- Generates a sibling `.xml` file for each input `.jack` source
-- Stops immediately on analysis errors
-- Deletes any output files created during the current run if analysis fails partway through
+- Tokenizes Jack source and compiles it to VM code
+- Generates a sibling `.vm` file for every input `.jack` file
+- Also generates a sibling `.xml` file when the syntax-analysis engine succeeds for that source
+- Stops immediately on analysis or compilation errors
+- Deletes files created during the current run if a failure happens partway through
 - Provides a simple help command for the CLI
 
-The project also contains:
+The project currently includes:
 
-- tokenizer reference tests against the official `T.xml` outputs
-- compiler-engine tests for individual grammar rules
-- Project 10 integration tests against the official parsed `.xml` outputs
-- a CLI integration test that runs `dotnet run` and compares generated files with the official fixtures
+- Project 10 tokenizer tests against the official `T.xml` outputs
+- Project 10 compiler-engine tests for grammar rules and official parsed XML outputs
+- Project 11 code-generator tests for VM generation behavior
+- program-level integration tests for Jack-to-VM output against the official Project 11 fixtures
 
-## Running the Syntax Analyser
+## Running the Compiler
 
 From the repository root:
 
@@ -29,23 +30,23 @@ From the repository root:
 dotnet run --project part2/Implementations/SyntaxAnalyser/SyntaxAnalyser.csproj -- ./path/to/Main.jack
 ```
 
-You can also pass a directory to analyse all top-level `.jack` files in that directory:
+To compile all top-level `.jack` files in a directory:
 
 ```bash
-dotnet run --project part2/Implementations/SyntaxAnalyser/SyntaxAnalyser.csproj -- ./path/to/ExpressionLessSquare
+dotnet run --project part2/Implementations/SyntaxAnalyser/SyntaxAnalyser.csproj -- ./path/to/Square
 ```
 
-You can use an absolute path for either form:
+You can also use an absolute path:
 
 ```bash
 dotnet run --project part2/Implementations/SyntaxAnalyser/SyntaxAnalyser.csproj -- /absolute/path/to/Main.jack
 ```
 
-The generated output is created next to the source:
+Generated outputs are created next to the source:
 
 ```text
-Main.jack  ->  Main.xml
-Square/    ->  Main.xml, Square.xml, SquareGame.xml
+Main.jack  ->  Main.vm (+ Main.xml when XML generation succeeds)
+Square/    ->  Main.vm, Square.vm, SquareGame.vm
 ```
 
 ### Help
@@ -62,65 +63,64 @@ part2/Implementations/
 ├── Implementations.slnx
 ├── SyntaxAnalyser/
 │   ├── Abstractions/
-│   │   ├── ICompilerEngine.cs
-│   │   ├── ISyntaxAnalyser.cs
-│   │   └── ITokenizer.cs
 │   ├── Models/
-│   │   ├── Token.cs
-│   │   └── TokenType.cs
 │   ├── Services/
+│   │   ├── CodeGenerator.cs
 │   │   ├── CompilerEngine.cs
 │   │   ├── SyntaxAnalyser.cs
 │   │   ├── Tokenizer.cs
+│   │   ├── VmWriter.cs
 │   │   └── XmlWriter.cs
 │   ├── Program.cs
 │   ├── README.md
 │   └── SyntaxAnalyser.csproj
 └── tests/
     └── SyntaxAnalyser.Tests/
+        ├── CodeGeneratorFoundationsTests.cs
+        ├── CodeGeneratorImplementationTests.cs
         ├── CompilerEngineImplementationTests.cs
         ├── Project10PathCoverageTests.cs
         ├── Project10ReferenceIntegrationTests.cs
+        ├── Project11ProgramVmIntegrationTests.cs
+        ├── Project11ReferenceCodeGeneratorTests.cs
         ├── SyntaxAnalyserProgramIntegrationTests.cs
-        ├── TokenizerTests.cs
-        └── SyntaxAnalyser.Tests.csproj
+        └── TokenizerTests.cs
 ```
 
 ## Testing
 
-Build the analyser project:
+Build the project:
 
 ```bash
 dotnet build part2/Implementations/SyntaxAnalyser/SyntaxAnalyser.csproj
 ```
 
-Run the CLI integration test only:
-
-```bash
-dotnet test part2/Implementations/tests/SyntaxAnalyser.Tests/SyntaxAnalyser.Tests.csproj --filter FullyQualifiedName~SyntaxAnalyserProgramIntegrationTests
-```
-
-Run the full test project:
+Run the full test suite:
 
 ```bash
 dotnet test part2/Implementations/tests/SyntaxAnalyser.Tests/SyntaxAnalyser.Tests.csproj
 ```
 
+Run only the Project 11 reference code-generation tests:
+
+```bash
+dotnet test part2/Implementations/tests/SyntaxAnalyser.Tests/SyntaxAnalyser.Tests.csproj --filter FullyQualifiedName~Project11ReferenceCodeGeneratorTests
+```
+
 The suite currently covers:
 
 - tokenizer behavior, including comments, strings, ranges, and keyword boundaries
-- compilation of classes, subroutines, statements, expressions, terms, and expression lists
-- reference comparisons against the official Project 10 `T.xml` and parsed `.xml` outputs
-- CLI behavior for analysing a Project 10 directory end to end
+- XML compilation for classes, subroutines, statements, expressions, terms, and expression lists
+- exact VM generation for Project 11 fixtures
+- CLI behavior for Jack directory compilation and output cleanup
 
 ## Current Limitations
 
-- The CLI analyses only top-level `.jack` files in a directory; it does not recurse into nested folders.
-- `SyntaxAnalyser.cs` is still an empty shell service; the CLI currently wires `Tokenizer` and `CompilerEngine` directly.
-- The XML writer is intentionally simple and focused on the project 10 output shape.
+- Directory compilation only reads top-level `.jack` files; it does not recurse into nested folders
+- `SyntaxAnalyser.cs` is still a thin shell service; the orchestration remains in `Program.cs`
+- XML generation is best-effort and is not required for the VM compilation path
 
-## Next Steps
+## Related Projects
 
-- Move the orchestration logic from `Program.cs` into a real `SyntaxAnalyser` service
-- Add CLI tests for help output and failure cleanup paths
-- Separate parsing, validation, and XML emission more explicitly inside the compilation engine
+- [VMTranslator](/Users/julesjuniormevaa/Desktop/learning/nand2tetris/part2/Implementations/VMTranslator)
+- [OperatingSystem](/Users/julesjuniormevaa/Desktop/learning/nand2tetris/part2/Implementations/OperatingSystem)
