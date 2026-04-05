@@ -1,0 +1,164 @@
+// This file is part of www.nand2tetris.org
+// and the book "The Elements of Computing Systems"
+// by Nisan and Schocken, MIT Press.
+// File name: projects/12/Math.jack
+
+/**
+ * A library of commonly used mathematical functions.
+ * All functions runs in O(n), where n is the number of bits used
+ * for representing a two's complement integer value (16 in the Hack computer).
+ */
+class Math {
+    static int n;
+    static Array powersOfTwo;
+
+    /** Initializes the Math library. */
+    function void init() {
+        var int i;
+        var int value;
+
+        let n = 16;
+        let powersOfTwo = Array.new(n);
+        let i = 0;
+        let value = 1;
+
+        while (i < 15) {
+            let powersOfTwo[i] = value;
+            let value = value + value;
+            let i = i + 1;
+        }
+
+        let powersOfTwo[15] = 32767 + 1;
+        return;
+    }
+
+    /** Returns the product of x and y. */
+    function int multiply(int x, int y) {
+        var int result;
+        var int addend;
+        var int i;
+        var int temp;
+        var boolean negative;
+
+        let negative = ((x < 0) & (y > 0)) | ((x > 0) & (y < 0));
+        let x = Math.abs(x);
+        let y = Math.abs(y);
+
+        if (x < y) {
+            let temp = x;
+            let x = y;
+            let y = temp;
+        }
+
+        let result = 0;
+        let addend = x;
+        let i = 0;
+
+        while (i < n) {
+            if (~((y & powersOfTwo[i]) = 0)) {
+                let result = result + addend;
+            }
+
+            let addend = addend + addend;
+            let i = i + 1;
+        }
+
+        if (negative) {
+            let result = -result;
+        }
+
+        return result;
+    }
+
+    /** Returns the integer part of x / y. */
+    function int divide(int x, int y) {
+        var int result;
+        var boolean negative;
+
+        if (y = 0) {
+            do Sys.error(3);
+        }
+
+        let negative = ((x < 0) & (y > 0)) | ((x > 0) & (y < 0));
+        let x = Math.abs(x);
+        let y = Math.abs(y);
+        let result = Math.dividePositive(x, y);
+
+        if (negative) {
+            let result = -result;
+        }
+
+        return result;
+    }
+
+    function int dividePositive(int x, int y) {
+        var int quotient;
+
+        if ((x < y) | (y < 1)) {
+            return 0;
+        }
+
+        let quotient = Math.dividePositive(x, y + y);
+
+        if ((x - Math.multiply(y, quotient + quotient)) < y) {
+            return quotient + quotient;
+        }
+
+        return quotient + quotient + 1;
+    }
+
+    /** Returns the integer part of the square root of x. */
+    function int sqrt(int x) {
+        var int i;
+        var int result;
+        var int candidate;
+        var int square;
+
+        if (x < 0) {
+            do Sys.error(4);
+        }
+
+        let i = 7;
+        let result = 0;
+
+        while ((i > 0) | (i = 0)) {
+            let candidate = result + powersOfTwo[i];
+            let square = Math.multiply(candidate, candidate);
+
+            if (((square = x) | (square < x)) & ~(square < 0)) {
+                let result = candidate;
+            }
+
+            let i = i - 1;
+        }
+
+        return result;
+    }
+
+    /** Returns the greater value. */
+    function int max(int a, int b) {
+        if (a > b) {
+            return a;
+        }
+
+        return b;
+    }
+
+    /** Returns the smaller value. */
+    function int min(int a, int b) {
+        if (a < b) {
+            return a;
+        }
+
+        return b;
+    }
+
+    /** Returns the absolute value of x. */
+    function int abs(int x) {
+        if (x < 0) {
+            return -x;
+        }
+
+        return x;
+    }
+}

@@ -1,0 +1,136 @@
+// This file is part of www.nand2tetris.org
+// and the book "The Elements of Computing Systems"
+// by Nisan and Schocken, MIT Press.
+// File name: projects/12/Memory.jack
+
+/**
+ * This library provides two services: direct access to the computer's main
+ * memory (RAM), and allocation and recycling of memory blocks. The Hack RAM
+ * consists of 32,768 words, each holding a 16-bit binary number.
+ */ 
+ 
+class Memory {
+    
+    static pointer p;
+    static pointer heap;
+    static pointer free_list;
+    
+    /** Initializes the class. */
+    function void init() {
+        let p = 0;
+        let heap = 2048;
+        let free_list = heap;
+        let heap[0] = -31416;
+        let heap[1] = 14334;
+        return;
+    }
+
+    /** Returns the RAM value at the given address. */
+    function int peek(int address) {
+        return p[address];
+    }
+
+    /** Sets the RAM value at the given address to the given value. */
+    function void poke(int address, int value) {
+        let p[address] = value;
+        return;
+    }
+
+    /** Finds an available RAM block of the given size and returns
+     *  a reference to its base address. */
+    function int alloc(int size) {
+        var int block;
+		let block = Memory._alloc(size);
+		
+		// If no suitble segment available, try memory defragmentation
+		if (block = -31416) {
+		    do Memory._defragment();
+			let block = Memory._alloc(size);
+		}
+		
+		// If defragmentation fails, raise an error.
+		if (block = -31416) {
+		    do Sys.error(5);
+		}
+		
+		return block + 2;
+    }
+	
+	
+	/** Helper function to alloc memory size directly */
+	function int _alloc(int size) {
+        
+        var pointer current, next, block;
+        
+        let current = free_list;
+        let next = free_list[0];
+        
+        // Find the first-fit memory segment
+        while (true) {
+            // Terminates when reaching the end of the free list
+            if (current = -31416) {
+                return -31416;
+            }
+            
+            if ((current[1] > (size + 2)) | (current[1] = (size + 2))) {
+			    let block = current + current[1] - size - 2;
+				let current[1] = current[1] - size;
+                let block[0] = -31416;      // Next = null
+                let block[1] = size;
+                return block;
+            }
+            
+            else {
+                let current = next;
+            }
+        }
+		return -31416;
+    }
+	
+	/** Merge adjcent memory fragment */
+	function void _defragment() {
+	    return;
+	}
+	
+	
+    /** De-allocates the given object (cast as an array) by making
+     *  it available for future allocations. */
+    function void deAlloc(Array o) {
+	    var pointer base, current;
+		
+		let base = o - 2;
+		let current = free_list;
+		// Append the memory segment of the given object to the end
+		// of the free list.
+		
+		//while (true) {
+		//    if (current[0] = -31416) { 
+		//	    let current[0] = base; 
+		//		let base[0] = -31416;
+		//		return; 
+		//	}
+		//	else {
+		//	    let current = current[0];
+		//	}
+		//}
+        
+        //  A new implementation featuring de-fragmentation.
+        while (true) {
+            if (current[0] = -31416) { 
+                let current[1] = base[1] + 2;
+                return;                
+            }
+            else {
+                if ((current < base) & (current[0] > base)) {
+                    let current[1] = base[1] + 2;
+                    return;
+                }
+                else {
+                    let current = current[0];
+                }
+            }
+        }
+		
+		return; 
+    }    
+}
